@@ -87,3 +87,22 @@ def test_categorize_counts_first_path_segment():
     ]
     counts = categorize_urls(urls)
     assert counts == {"blog": 2, "services": 1, "(root)": 1}
+
+
+from compresearch.sitemap import infer_cadence
+
+
+def test_infer_cadence_posts_per_month():
+    # 4 posts spanning ~2 months (60 days / 30.44 = 1.97 months) -> 2.0/month
+    urls = [
+        UrlEntry(loc="a", lastmod=date(2026, 1, 1)),
+        UrlEntry(loc="b", lastmod=date(2026, 1, 20)),
+        UrlEntry(loc="c", lastmod=date(2026, 2, 15)),
+        UrlEntry(loc="d", lastmod=date(2026, 3, 2)),
+    ]
+    assert infer_cadence(urls) == 2.0
+
+
+def test_infer_cadence_needs_two_dates():
+    assert infer_cadence([UrlEntry(loc="a", lastmod=date(2026, 1, 1))]) is None
+    assert infer_cadence([UrlEntry(loc="a")]) is None

@@ -94,3 +94,15 @@ def categorize_urls(urls: list[UrlEntry]) -> dict[str, int]:
         section = path.split("/")[0] if path else "(root)"
         counts[section] = counts.get(section, 0) + 1
     return counts
+
+
+def infer_cadence(urls: list[UrlEntry]) -> float | None:
+    """Estimate posts per month from lastmod dates; None if fewer than 2 dates."""
+    dates = sorted(e.lastmod for e in urls if e.lastmod)
+    if len(dates) < 2:
+        return None
+    span_days = (dates[-1] - dates[0]).days
+    if span_days <= 0:
+        return None
+    months = span_days / 30.44
+    return round(len(dates) / months, 1)
