@@ -12,7 +12,7 @@ from lxml import etree
 
 from compresearch.job_store import load_data, save_data
 from compresearch.models import (
-    DomainSitemap, SitemapGap, SitemapResult, UrlEntry,
+    DomainSitemap, JobData, SitemapGap, SitemapResult, UrlEntry,
 )
 
 Fetcher = Callable[[str], bytes]
@@ -161,3 +161,25 @@ def compare_domains(
         competitors=competitors,
         gaps=_find_gaps(client, competitors),
     )
+
+
+def http_fetch(url: str) -> bytes:
+    """Production fetcher: real HTTP GET with redirects and a UA header."""
+    resp = httpx.get(
+        url,
+        follow_redirects=True,
+        timeout=30.0,
+        headers={"User-Agent": "TAG-CompResearch/1.0"},
+    )
+    resp.raise_for_status()
+    return resp.content
+
+
+def run_sitemap(job_dir: Path, fetch: Fetcher = http_fetch) -> JobData:
+    """Run sitemap comparison for a job and persist the result to data.json."""
+    data = load_data(job_dir)
+    data.sitemap = compare_domains(
+        data.config.client_url, data.config.competitor_urls, fetch
+    )
+    save_data(job_dir, data)
+    return data

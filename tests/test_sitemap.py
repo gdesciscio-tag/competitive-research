@@ -160,3 +160,30 @@ def test_compare_domains_finds_gaps():
     assert [g.section for g in result.gaps] == ["case-studies"]
     assert result.gaps[0].client_count == 0
     assert result.gaps[0].competitors_with == ["https://rival.com"]
+
+
+from compresearch.sitemap import run_sitemap
+from compresearch.job_store import create_job, load_data
+from compresearch.models import JobConfig
+
+
+def test_run_sitemap_writes_results_to_data_json(tmp_path):
+    cfg = JobConfig(
+        client_name="Acme Co",
+        client_url="https://acme.com",
+        competitor_urls=["https://rival.com"],
+    )
+    job_dir = create_job(cfg, jobs_dir=tmp_path)
+
+    fetch = make_fetch({
+        "https://acme.com/robots.txt": b"Sitemap: https://acme.com/sitemap.xml\n",
+        "https://acme.com/sitemap.xml": CLIENT_MAP,
+        "https://rival.com/robots.txt": b"Sitemap: https://rival.com/sitemap.xml\n",
+        "https://rival.com/sitemap.xml": RIVAL_MAP,
+    })
+    run_sitemap(job_dir, fetch=fetch)
+
+    data = load_data(job_dir)
+    assert data.sitemap is not None
+    assert data.sitemap.client.total_urls == 1
+    assert [g.section for g in data.sitemap.gaps] == ["case-studies"]
