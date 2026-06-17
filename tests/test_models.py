@@ -47,3 +47,37 @@ def test_jobdata_sitemap_optional():
 def test_jobconfig_rejects_invalid_keyword_source():
     with pytest.raises(ValidationError):
         JobConfig(client_name="X", client_url="https://x.com", keyword_source="bogus")
+
+
+from compresearch.models import (
+    KeywordEntry, DomainKeywords, KeywordGap, QuickWin, KeywordResult,
+)
+
+
+def test_keyword_models_round_trip():
+    result = KeywordResult(
+        client=DomainKeywords(
+            domain="https://acme.com",
+            keywords=[KeywordEntry(keyword="crm software", search_volume=1000,
+                                   difficulty=40.0, position=8, url="https://acme.com/crm")],
+            total_keywords=1,
+        ),
+        competitors=[DomainKeywords(domain="https://rival.com")],
+        gaps=[KeywordGap(keyword="free crm", search_volume=500,
+                         competitors_ranking=["https://rival.com"],
+                         best_competitor_position=3, traffic_value=55.0)],
+        quick_wins=[QuickWin(keyword="crm software", position=8,
+                             search_volume=1000, traffic_value=30.0)],
+        is_partial=False,
+    )
+    restored = KeywordResult.model_validate_json(result.model_dump_json())
+    assert restored.client.keywords[0].keyword == "crm software"
+    assert restored.gaps[0].best_competitor_position == 3
+    assert restored.quick_wins[0].position == 8
+    assert restored.is_partial is False
+
+
+def test_jobdata_has_optional_keywords():
+    from compresearch.models import JobConfig, JobData
+    data = JobData(config=JobConfig(client_name="X", client_url="https://x.com"))
+    assert data.keywords is None

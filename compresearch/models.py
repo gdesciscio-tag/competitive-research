@@ -34,6 +34,46 @@ class SitemapResult(BaseModel):
     is_partial: bool = False
 
 
+class KeywordEntry(BaseModel):
+    keyword: str
+    search_volume: int | None = None
+    difficulty: float | None = None
+    position: int | None = None
+    url: str | None = None
+
+
+class DomainKeywords(BaseModel):
+    domain: str
+    keywords: list[KeywordEntry] = Field(default_factory=list)
+    total_keywords: int = 0
+    error: str | None = None
+
+
+class KeywordGap(BaseModel):
+    keyword: str
+    search_volume: int | None = None
+    difficulty: float | None = None
+    competitors_ranking: list[str] = Field(default_factory=list)
+    best_competitor_position: int | None = None
+    traffic_value: float | None = None
+
+
+class QuickWin(BaseModel):
+    keyword: str
+    position: int
+    search_volume: int | None = None
+    url: str | None = None
+    traffic_value: float | None = None
+
+
+class KeywordResult(BaseModel):
+    client: DomainKeywords | None = None
+    competitors: list[DomainKeywords] = Field(default_factory=list)
+    gaps: list[KeywordGap] = Field(default_factory=list)
+    quick_wins: list[QuickWin] = Field(default_factory=list)
+    is_partial: bool = False
+
+
 class JobConfig(BaseModel):
     client_name: str
     client_url: str
@@ -44,4 +84,5 @@ class JobConfig(BaseModel):
 class JobData(BaseModel):
     config: JobConfig
     sitemap: SitemapResult | None = None
-    # Future sections (keywords, topical_map, draft_post) added in later plans.
+    keywords: KeywordResult | None = None
+    # Future sections (topical_map, draft_post) added in later plans.
