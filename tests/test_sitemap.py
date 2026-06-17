@@ -106,3 +106,25 @@ def test_infer_cadence_posts_per_month():
 def test_infer_cadence_needs_two_dates():
     assert infer_cadence([UrlEntry(loc="a", lastmod=date(2026, 1, 1))]) is None
     assert infer_cadence([UrlEntry(loc="a")]) is None
+
+
+from compresearch.sitemap import analyze_domain
+
+
+def test_analyze_domain_happy_path():
+    fetch = make_fetch({
+        "https://acme.com/robots.txt": b"Sitemap: https://acme.com/sitemap.xml\n",
+        "https://acme.com/sitemap.xml": URLSET,
+    })
+    result = analyze_domain("https://acme.com", fetch)
+    assert result.error is None
+    assert result.total_urls == 3
+    assert result.section_counts == {"blog": 2, "about": 1}
+    assert result.posts_per_month is not None
+
+
+def test_analyze_domain_captures_errors():
+    fetch = make_fetch({})  # every fetch raises
+    result = analyze_domain("https://broken.com", fetch)
+    assert result.error is not None
+    assert result.total_urls == 0

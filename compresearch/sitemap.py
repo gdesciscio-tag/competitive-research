@@ -106,3 +106,22 @@ def infer_cadence(urls: list[UrlEntry]) -> float | None:
         return None
     months = span_days / 30.44
     return round(len(dates) / months, 1)
+
+
+def analyze_domain(domain_url: str, fetch: Fetcher) -> DomainSitemap:
+    """Discover, fetch, parse, and summarize one domain's sitemap content."""
+    try:
+        seen: set[str] = set()
+        urls: list[UrlEntry] = []
+        for sitemap_url in discover_sitemaps(domain_url, fetch):
+            urls.extend(fetch_sitemap_urls(sitemap_url, fetch, seen))
+        deduped = list({e.loc: e for e in urls}.values())
+        return DomainSitemap(
+            domain=domain_url,
+            urls=deduped,
+            section_counts=categorize_urls(deduped),
+            total_urls=len(deduped),
+            posts_per_month=infer_cadence(deduped),
+        )
+    except Exception as exc:  # capture, never crash the whole job
+        return DomainSitemap(domain=domain_url, error=str(exc))
