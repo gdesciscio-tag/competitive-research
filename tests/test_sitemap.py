@@ -26,3 +26,49 @@ def test_discover_falls_back_to_default_when_no_robots():
 def test_discover_normalizes_bare_domain():
     fetch = make_fetch({})
     assert discover_sitemaps("acme.com", fetch) == ["https://acme.com/sitemap.xml"]
+
+
+import gzip as _gzip
+from datetime import date
+from compresearch.sitemap import fetch_sitemap_urls
+
+URLSET = b"""<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url><loc>https://acme.com/blog/post-1</loc><lastmod>2026-01-10</lastmod></url>
+  <url><loc>https://acme.com/blog/post-2</loc><lastmod>2026-02-10T08:00:00+00:00</lastmod></url>
+  <url><loc>https://acme.com/about</loc></url>
+</urlset>"""
+
+INDEX = b"""<?xml version="1.0" encoding="UTF-8"?>
+<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <sitemap><loc>https://acme.com/sitemap-posts.xml</loc></sitemap>
+</sitemapindex>"""
+
+
+def test_fetch_parses_urlset_with_lastmod():
+    fetch = make_fetch({"https://acme.com/sitemap.xml": URLSET})
+    entries = fetch_sitemap_urls("https://acme.com/sitemap.xml", fetch)
+    locs = [e.loc for e in entries]
+    assert locs == [
+        "https://acme.com/blog/post-1",
+        "https://acme.com/blog/post-2",
+        "https://acme.com/about",
+    ]
+    assert entries[0].lastmod == date(2026, 1, 10)
+    assert entries[1].lastmod == date(2026, 2, 10)
+    assert entries[2].lastmod is None
+
+
+def test_fetch_recurses_into_sitemap_index():
+    fetch = make_fetch({
+        "https://acme.com/sitemap_index.xml": INDEX,
+        "https://acme.com/sitemap-posts.xml": URLSET,
+    })
+    entries = fetch_sitemap_urls("https://acme.com/sitemap_index.xml", fetch)
+    assert len(entries) == 3
+
+
+def test_fetch_handles_gzip():
+    fetch = make_fetch({"https://acme.com/sitemap.xml.gz": _gzip.compress(URLSET)})
+    entries = fetch_sitemap_urls("https://acme.com/sitemap.xml.gz", fetch)
+    assert len(entries) == 3
