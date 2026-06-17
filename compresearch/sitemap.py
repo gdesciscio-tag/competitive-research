@@ -125,3 +125,39 @@ def analyze_domain(domain_url: str, fetch: Fetcher) -> DomainSitemap:
         )
     except Exception as exc:  # capture, never crash the whole job
         return DomainSitemap(domain=domain_url, error=str(exc))
+
+
+def _find_gaps(
+    client: DomainSitemap, competitors: list[DomainSitemap]
+) -> list[SitemapGap]:
+    """Sections one or more competitors have that the client has zero of."""
+    competitor_sections: dict[str, list[str]] = {}
+    for comp in competitors:
+        for section in comp.section_counts:
+            competitor_sections.setdefault(section, []).append(comp.domain)
+
+    gaps: list[SitemapGap] = []
+    for section, domains in competitor_sections.items():
+        if client.section_counts.get(section, 0) == 0:
+            gaps.append(
+                SitemapGap(
+                    section=section,
+                    competitors_with=sorted(set(domains)),
+                    client_count=0,
+                )
+            )
+    gaps.sort(key=lambda g: len(g.competitors_with), reverse=True)
+    return gaps
+
+
+def compare_domains(
+    client_url: str, competitor_urls: list[str], fetch: Fetcher
+) -> SitemapResult:
+    """Analyze the client and each competitor, then compute content gaps."""
+    client = analyze_domain(client_url, fetch)
+    competitors = [analyze_domain(url, fetch) for url in competitor_urls]
+    return SitemapResult(
+        client=client,
+        competitors=competitors,
+        gaps=_find_gaps(client, competitors),
+    )

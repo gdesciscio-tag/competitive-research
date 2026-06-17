@@ -128,3 +128,35 @@ def test_analyze_domain_captures_errors():
     result = analyze_domain("https://broken.com", fetch)
     assert result.error is not None
     assert result.total_urls == 0
+
+
+from compresearch.sitemap import compare_domains
+
+CLIENT_MAP = b"""<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url><loc>https://acme.com/blog/a</loc></url>
+</urlset>"""
+
+RIVAL_MAP = b"""<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url><loc>https://rival.com/blog/a</loc></url>
+  <url><loc>https://rival.com/case-studies/x</loc></url>
+  <url><loc>https://rival.com/case-studies/y</loc></url>
+</urlset>"""
+
+
+def test_compare_domains_finds_gaps():
+    fetch = make_fetch({
+        "https://acme.com/robots.txt": b"Sitemap: https://acme.com/sitemap.xml\n",
+        "https://acme.com/sitemap.xml": CLIENT_MAP,
+        "https://rival.com/robots.txt": b"Sitemap: https://rival.com/sitemap.xml\n",
+        "https://rival.com/sitemap.xml": RIVAL_MAP,
+    })
+    result = compare_domains("https://acme.com", ["https://rival.com"], fetch)
+
+    assert result.client.total_urls == 1
+    assert result.competitors[0].total_urls == 3
+    # 'case-studies' is a section the competitor has and the client lacks
+    assert [g.section for g in result.gaps] == ["case-studies"]
+    assert result.gaps[0].client_count == 0
+    assert result.gaps[0].competitors_with == ["https://rival.com"]
