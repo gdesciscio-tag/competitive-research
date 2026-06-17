@@ -72,3 +72,18 @@ def test_fetch_handles_gzip():
     fetch = make_fetch({"https://acme.com/sitemap.xml.gz": _gzip.compress(URLSET)})
     entries = fetch_sitemap_urls("https://acme.com/sitemap.xml.gz", fetch)
     assert len(entries) == 3
+
+
+from compresearch.sitemap import categorize_urls
+from compresearch.models import UrlEntry
+
+
+def test_categorize_counts_first_path_segment():
+    urls = [
+        UrlEntry(loc="https://acme.com/blog/a"),
+        UrlEntry(loc="https://acme.com/blog/b"),
+        UrlEntry(loc="https://acme.com/services/x"),
+        UrlEntry(loc="https://acme.com/"),
+    ]
+    counts = categorize_urls(urls)
+    assert counts == {"blog": 2, "services": 1, "(root)": 1}

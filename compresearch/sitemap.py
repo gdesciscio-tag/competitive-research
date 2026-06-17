@@ -84,3 +84,13 @@ def fetch_sitemap_urls(
             )
         )
     return entries
+
+
+def categorize_urls(urls: list[UrlEntry]) -> dict[str, int]:
+    """Count URLs by their first path segment ('(root)' for the homepage)."""
+    counts: dict[str, int] = {}
+    for entry in urls:
+        path = urlparse(entry.loc).path.strip("/")
+        section = path.split("/")[0] if path else "(root)"
+        counts[section] = counts.get(section, 0) + 1
+    return counts
