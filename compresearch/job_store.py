@@ -20,13 +20,22 @@ def slugify(name: str) -> str:
 
 
 def create_job(config: JobConfig, jobs_dir: Path = DEFAULT_JOBS_DIR) -> Path:
-    """Create jobs/<slug>/ with job.yaml, data.json, and outputs/. Returns the job dir."""
+    """Create or update jobs/<slug>/ (job.yaml, data.json, outputs/). Returns the job dir.
+
+    If data.json already exists, its prior analysis is preserved and only the
+    config is refreshed, so re-running a job does not discard completed work.
+    """
     job_dir = Path(jobs_dir) / slugify(config.client_name)
     (job_dir / "outputs").mkdir(parents=True, exist_ok=True)
     (job_dir / "job.yaml").write_text(
         yaml.safe_dump(config.model_dump(), sort_keys=False), encoding="utf-8"
     )
-    save_data(job_dir, JobData(config=config))
+    if (job_dir / "data.json").exists():
+        data = load_data(job_dir)
+        data.config = config
+    else:
+        data = JobData(config=config)
+    save_data(job_dir, data)
     return job_dir
 
 

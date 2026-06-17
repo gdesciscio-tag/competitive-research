@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import gzip
+import logging
 from datetime import date
 from pathlib import Path
 from typing import Callable
@@ -53,12 +54,13 @@ def _parse_date(text: str) -> date | None:
 
 
 def fetch_sitemap_urls(
-    sitemap_url: str, fetch: Fetcher, _seen: set[str] | None = None
+    sitemap_url: str, fetch: Fetcher, _seen: set[str] | None = None, _depth: int = 0
 ) -> list[UrlEntry]:
     """Fetch a sitemap, recursing into sitemap indexes; return all URL entries."""
+    MAX_DEPTH = 10
     if _seen is None:
         _seen = set()
-    if sitemap_url in _seen:
+    if sitemap_url in _seen or _depth > MAX_DEPTH:
         return []
     _seen.add(sitemap_url)
 
@@ -68,7 +70,7 @@ def fetch_sitemap_urls(
     if etree.QName(root).localname == "sitemapindex":
         entries: list[UrlEntry] = []
         for loc in root.xpath(".//*[local-name()='loc']/text()"):
-            entries.extend(fetch_sitemap_urls(loc.strip(), fetch, _seen))
+            entries.extend(fetch_sitemap_urls(loc.strip(), fetch, _seen, _depth + 1))
         return entries
 
     entries = []
@@ -109,28 +111,45 @@ def infer_cadence(urls: list[UrlEntry]) -> float | None:
 
 
 def analyze_domain(domain_url: str, fetch: Fetcher) -> DomainSitemap:
-    """Discover, fetch, parse, and summarize one domain's sitemap content."""
+    """Discover, fetch, parse, and summarize one domain's sitemap content.
+
+    Never raises: discovery failure yields an error result; if some sitemaps
+    fetch and others fail, the collected URLs are kept and failures are logged.
+    """
     try:
-        seen: set[str] = set()
-        urls: list[UrlEntry] = []
-        for sitemap_url in discover_sitemaps(domain_url, fetch):
-            urls.extend(fetch_sitemap_urls(sitemap_url, fetch, seen))
-        deduped = list({e.loc: e for e in urls}.values())
-        return DomainSitemap(
-            domain=domain_url,
-            urls=deduped,
-            section_counts=categorize_urls(deduped),
-            total_urls=len(deduped),
-            posts_per_month=infer_cadence(deduped),
-        )
-    except Exception as exc:  # capture, never crash the whole job
+        sitemap_urls = discover_sitemaps(domain_url, fetch)
+    except Exception as exc:
+        logging.warning("Sitemap discovery failed for %s: %s", domain_url, exc)
         return DomainSitemap(domain=domain_url, error=str(exc))
+
+    seen: set[str] = set()
+    urls: list[UrlEntry] = []
+    errors: list[str] = []
+    for sitemap_url in sitemap_urls:
+        try:
+            urls.extend(fetch_sitemap_urls(sitemap_url, fetch, seen))
+        except Exception as exc:
+            logging.warning("Failed to fetch sitemap %s for %s: %s", sitemap_url, domain_url, exc)
+            errors.append(f"{sitemap_url}: {exc}")
+
+    deduped = list({e.loc: e for e in urls}.values())
+    error = "; ".join(errors) if errors and not deduped else None
+    return DomainSitemap(
+        domain=domain_url,
+        urls=deduped,
+        section_counts=categorize_urls(deduped),
+        total_urls=len(deduped),
+        posts_per_month=infer_cadence(deduped),
+        error=error,
+    )
 
 
 def _find_gaps(
     client: DomainSitemap, competitors: list[DomainSitemap]
 ) -> list[SitemapGap]:
     """Sections one or more competitors have that the client has zero of."""
+    if client.error:
+        return []
     competitor_sections: dict[str, list[str]] = {}
     for comp in competitors:
         for section in comp.section_counts:
@@ -156,10 +175,12 @@ def compare_domains(
     """Analyze the client and each competitor, then compute content gaps."""
     client = analyze_domain(client_url, fetch)
     competitors = [analyze_domain(url, fetch) for url in competitor_urls]
+    is_partial = bool(client.error) or any(c.error for c in competitors)
     return SitemapResult(
         client=client,
         competitors=competitors,
         gaps=_find_gaps(client, competitors),
+        is_partial=is_partial,
     )
 
 

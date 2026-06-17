@@ -187,3 +187,38 @@ def test_run_sitemap_writes_results_to_data_json(tmp_path):
     assert data.sitemap is not None
     assert data.sitemap.client.total_urls == 1
     assert [g.section for g in data.sitemap.gaps] == ["case-studies"]
+
+
+def test_find_gaps_empty_when_client_failed():
+    # client fetch fails entirely; only the competitor succeeds
+    fetch = make_fetch({
+        "https://rival.com/robots.txt": b"Sitemap: https://rival.com/sitemap.xml\n",
+        "https://rival.com/sitemap.xml": RIVAL_MAP,
+    })
+    result = compare_domains("https://acme.com", ["https://rival.com"], fetch)
+    assert result.client.error is not None
+    assert result.gaps == []
+    assert result.is_partial is True
+
+
+def test_compare_domains_is_partial_when_competitor_fails():
+    fetch = make_fetch({
+        "https://acme.com/robots.txt": b"Sitemap: https://acme.com/sitemap.xml\n",
+        "https://acme.com/sitemap.xml": CLIENT_MAP,
+        # rival.com not in dict -> its fetches fail
+    })
+    result = compare_domains("https://acme.com", ["https://rival.com"], fetch)
+    assert result.client.error is None
+    assert result.competitors[0].error is not None
+    assert result.is_partial is True
+
+
+def test_clean_run_is_not_partial():
+    fetch = make_fetch({
+        "https://acme.com/robots.txt": b"Sitemap: https://acme.com/sitemap.xml\n",
+        "https://acme.com/sitemap.xml": CLIENT_MAP,
+        "https://rival.com/robots.txt": b"Sitemap: https://rival.com/sitemap.xml\n",
+        "https://rival.com/sitemap.xml": RIVAL_MAP,
+    })
+    result = compare_domains("https://acme.com", ["https://rival.com"], fetch)
+    assert result.is_partial is False

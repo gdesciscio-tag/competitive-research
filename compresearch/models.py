@@ -31,6 +31,7 @@ class SitemapResult(BaseModel):
     client: DomainSitemap | None = None
     competitors: list[DomainSitemap] = Field(default_factory=list)
     gaps: list[SitemapGap] = Field(default_factory=list)
+    is_partial: bool = False
 
 
 class JobConfig(BaseModel):

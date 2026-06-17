@@ -52,3 +52,21 @@ def test_slugify_rejects_empty_result():
         slugify("")
     with pytest.raises(ValueError):
         slugify("---")
+
+
+def test_create_job_preserves_existing_data_on_rerun(tmp_path):
+    from compresearch.models import SitemapResult, DomainSitemap
+    cfg = JobConfig(client_name="Acme Co", client_url="https://acme.com")
+    job_dir = create_job(cfg, jobs_dir=tmp_path)
+    data = load_data(job_dir)
+    data.sitemap = SitemapResult(client=DomainSitemap(domain="https://acme.com", total_urls=5))
+    save_data(job_dir, data)
+
+    # Re-run create_job for the same client with an updated config
+    cfg2 = JobConfig(client_name="Acme Co", client_url="https://acme.com", keyword_source="manual")
+    create_job(cfg2, jobs_dir=tmp_path)
+
+    reloaded = load_data(job_dir)
+    assert reloaded.sitemap is not None  # prior analysis preserved
+    assert reloaded.sitemap.client.total_urls == 5
+    assert reloaded.config.keyword_source == "manual"  # config refreshed
