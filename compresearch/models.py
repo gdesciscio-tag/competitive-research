@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from datetime import date
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
@@ -36,7 +37,7 @@ class JobConfig(BaseModel):
     client_name: str
     client_url: str
     competitor_urls: list[str] = Field(default_factory=list)
-    keyword_source: str = "api"  # "api" | "manual"
+    keyword_source: Literal["api", "manual"] = "api"
 
 
 class JobData(BaseModel):

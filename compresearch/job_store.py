@@ -14,6 +14,8 @@ DEFAULT_JOBS_DIR = Path("jobs")
 def slugify(name: str) -> str:
     """Turn a client name into a filesystem-safe slug."""
     slug = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")
+    if not slug:
+        raise ValueError(f"Client name {name!r} produces an empty slug")
     return slug
 
 

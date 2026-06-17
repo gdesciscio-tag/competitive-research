@@ -1,5 +1,8 @@
 # tests/test_models.py
+import pytest
+
 from datetime import date
+from pydantic import ValidationError
 from compresearch.models import (
     UrlEntry, DomainSitemap, SitemapGap, SitemapResult, JobConfig, JobData,
 )
@@ -39,3 +42,8 @@ def test_jobdata_round_trip_through_json():
 def test_jobdata_sitemap_optional():
     data = JobData(config=JobConfig(client_name="X", client_url="https://x.com"))
     assert data.sitemap is None
+
+
+def test_jobconfig_rejects_invalid_keyword_source():
+    with pytest.raises(ValidationError):
+        JobConfig(client_name="X", client_url="https://x.com", keyword_source="bogus")

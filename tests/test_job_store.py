@@ -1,4 +1,6 @@
 # tests/test_job_store.py
+import pytest
+
 from compresearch.job_store import slugify, create_job, load_config, load_data, save_data
 from compresearch.models import JobConfig
 
@@ -43,3 +45,10 @@ def test_save_data_persists_changes(tmp_path):
     save_data(job_dir, data)
 
     assert load_data(job_dir).config.keyword_source == "manual"
+
+
+def test_slugify_rejects_empty_result():
+    with pytest.raises(ValueError):
+        slugify("")
+    with pytest.raises(ValueError):
+        slugify("---")
