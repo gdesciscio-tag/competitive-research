@@ -1,0 +1,55 @@
+# compresearch/job_store.py
+from __future__ import annotations
+
+import re
+from pathlib import Path
+
+import yaml
+
+from compresearch.models import JobConfig, JobData
+
+DEFAULT_JOBS_DIR = Path("jobs")
+
+
+def slugify(name: str) -> str:
+    """Turn a client name into a filesystem-safe slug."""
+    slug = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")
+    if not slug:
+        raise ValueError(f"Client name {name!r} produces an empty slug")
+    return slug
+
+
+def create_job(config: JobConfig, jobs_dir: Path = DEFAULT_JOBS_DIR) -> Path:
+    """Create or update jobs/<slug>/ (job.yaml, data.json, outputs/). Returns the job dir.
+
+    If data.json already exists, its prior analysis is preserved and only the
+    config is refreshed, so re-running a job does not discard completed work.
+    """
+    job_dir = Path(jobs_dir) / slugify(config.client_name)
+    (job_dir / "outputs").mkdir(parents=True, exist_ok=True)
+    (job_dir / "job.yaml").write_text(
+        yaml.safe_dump(config.model_dump(), sort_keys=False), encoding="utf-8"
+    )
+    if (job_dir / "data.json").exists():
+        data = load_data(job_dir)
+        data.config = config
+    else:
+        data = JobData(config=config)
+    save_data(job_dir, data)
+    return job_dir
+
+
+def load_config(job_dir: Path) -> JobConfig:
+    raw = yaml.safe_load((Path(job_dir) / "job.yaml").read_text(encoding="utf-8"))
+    return JobConfig.model_validate(raw)
+
+
+def load_data(job_dir: Path) -> JobData:
+    text = (Path(job_dir) / "data.json").read_text(encoding="utf-8")
+    return JobData.model_validate_json(text)
+
+
+def save_data(job_dir: Path, data: JobData) -> None:
+    (Path(job_dir) / "data.json").write_text(
+        data.model_dump_json(indent=2), encoding="utf-8"
+    )

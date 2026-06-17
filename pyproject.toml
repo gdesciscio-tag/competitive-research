@@ -1,0 +1,12 @@
+[project]
+name = "compresearch"
+version = "0.1.0"
+description = "TAG Online competitive research automation"
+requires-python = ">=3.11"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-v"
+
+[tool.setuptools.packages.find]
+include = ["compresearch*"]
