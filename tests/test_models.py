@@ -95,3 +95,45 @@ def test_jobconfig_rejects_invalid_url():
 def test_jobconfig_accepts_bare_domain():
     cfg = JobConfig(client_name="X", client_url="acme.com", competitor_urls=["rival.com"])
     assert cfg.client_url == "acme.com"
+
+
+from compresearch.models import (
+    ArticleIdea, TopicCluster, PillarTopic, TopicalMap, TopicalMapResult,
+)
+
+
+def test_topical_map_models_round_trip():
+    result = TopicalMapResult(
+        map=TopicalMap(
+            pillars=[PillarTopic(
+                name="CRM Basics",
+                description="Foundational CRM education",
+                clusters=[TopicCluster(
+                    name="Getting started",
+                    articles=[ArticleIdea(
+                        title="What is a CRM?",
+                        target_keyword="what is a crm",
+                        search_intent="informational",
+                        estimated_volume=2000,
+                        rationale="Fills an informational gap.",
+                    )],
+                )],
+            )],
+            summary="Three pillars covering CRM education and comparison.",
+        ),
+        model="claude-sonnet-4-6",
+    )
+    restored = TopicalMapResult.model_validate_json(result.model_dump_json())
+    assert restored.map.pillars[0].clusters[0].articles[0].target_keyword == "what is a crm"
+    assert restored.model == "claude-sonnet-4-6"
+    assert restored.error is None
+
+
+def test_jobconfig_business_description_optional_and_jobdata_topical_map():
+    from compresearch.models import JobConfig, JobData
+    cfg = JobConfig(client_name="X", client_url="https://x.com")
+    assert cfg.business_description is None
+    cfg2 = JobConfig(client_name="X", client_url="https://x.com",
+                     business_description="We sell CRM software")
+    assert cfg2.business_description == "We sell CRM software"
+    assert JobData(config=cfg).topical_map is None

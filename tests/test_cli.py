@@ -66,3 +66,45 @@ def test_keywords_subcommand_manual_mode(tmp_path):
     assert returned == job_dir
     data = load_data(returned)
     assert [g.keyword for g in data.keywords.gaps] == ["free crm"]
+
+
+from compresearch.models import (
+    TopicalMap, PillarTopic, TopicCluster, ArticleIdea,
+)
+
+
+def _fake_generator(result):
+    class FakeGenerator:
+        model = "fake-model"
+
+        def __call__(self, prompt):
+            return result
+    return FakeGenerator()
+
+
+def test_topical_map_subcommand(tmp_path):
+    cfg = JobConfig(client_name="Acme Co", client_url="https://acme.com",
+                    business_description="Acme sells CRM software")
+    job_dir = create_job(cfg, jobs_dir=tmp_path)
+    fake_map = TopicalMap(pillars=[PillarTopic(
+        name="CRM Basics",
+        clusters=[TopicCluster(name="Intro", articles=[ArticleIdea(title="What is a CRM?")])],
+    )])
+
+    returned = run_from_args(
+        ["topical-map", "--job-dir", str(job_dir)],
+        generator=_fake_generator(fake_map),
+    )
+    assert returned == job_dir
+    data = load_data(returned)
+    assert data.topical_map.map.pillars[0].name == "CRM Basics"
+
+
+def test_topical_map_subcommand_missing_api_key_exits_cleanly(tmp_path, monkeypatch):
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    cfg = JobConfig(client_name="Acme Co", client_url="https://acme.com")
+    job_dir = create_job(cfg, jobs_dir=tmp_path)
+    import pytest
+    with pytest.raises(SystemExit) as exc:
+        run_from_args(["topical-map", "--job-dir", str(job_dir)])  # no generator -> from_settings
+    assert exc.value.code == 1
