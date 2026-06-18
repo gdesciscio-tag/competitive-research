@@ -6,11 +6,12 @@ import sys
 from pathlib import Path
 
 from compresearch.job_store import create_job
+from compresearch.keywords import run_keywords
 from compresearch.models import JobConfig
 from compresearch.sitemap import Fetcher, http_fetch, run_sitemap
 
 
-def run_from_args(argv: list[str], fetch: Fetcher = http_fetch) -> Path:
+def run_from_args(argv: list[str], fetch: Fetcher = http_fetch, provider=None) -> Path:
     """Parse args, create the job, run the requested module. Returns the job dir."""
     parser = argparse.ArgumentParser(prog="compresearch")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -21,17 +22,28 @@ def run_from_args(argv: list[str], fetch: Fetcher = http_fetch) -> Path:
     sm.add_argument("--competitors", default="", help="Comma-separated competitor URLs")
     sm.add_argument("--jobs-dir", default="jobs")
 
+    kw = sub.add_parser("keywords", help="Run keyword analysis on an existing job")
+    kw.add_argument("--job-dir", required=True)
+
     args = parser.parse_args(argv)
 
-    competitors = [c.strip() for c in args.competitors.split(",") if c.strip()]
-    config = JobConfig(
-        client_name=args.client_name,
-        client_url=args.client_url,
-        competitor_urls=competitors,
-    )
-    job_dir = create_job(config, jobs_dir=Path(args.jobs_dir))
-    run_sitemap(job_dir, fetch=fetch)
-    return job_dir
+    if args.command == "sitemap":
+        competitors = [c.strip() for c in args.competitors.split(",") if c.strip()]
+        config = JobConfig(
+            client_name=args.client_name,
+            client_url=args.client_url,
+            competitor_urls=competitors,
+        )
+        job_dir = create_job(config, jobs_dir=Path(args.jobs_dir))
+        run_sitemap(job_dir, fetch=fetch)
+        return job_dir
+
+    if args.command == "keywords":
+        job_dir = Path(args.job_dir)
+        run_keywords(job_dir, provider=provider)
+        return job_dir
+
+    raise ValueError(f"Unknown command: {args.command}")  # pragma: no cover
 
 
 def main() -> None:

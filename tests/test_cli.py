@@ -34,3 +34,24 @@ def test_run_from_args_creates_job_and_runs_sitemap(tmp_path):
     assert job_dir == tmp_path / "acme-co"
     data = load_data(job_dir)
     assert data.sitemap.client.total_urls == 1
+
+
+from compresearch.job_store import create_job
+from compresearch.models import JobConfig
+
+
+def test_keywords_subcommand_manual_mode(tmp_path):
+    cfg = JobConfig(client_name="Acme Co", client_url="https://acme.com",
+                    competitor_urls=["https://rival.com"], keyword_source="manual")
+    job_dir = create_job(cfg, jobs_dir=tmp_path)
+    input_dir = job_dir / "keywords_input"
+    input_dir.mkdir()
+    (input_dir / "acme-com.csv").write_text(
+        "keyword,search_volume,difficulty,position,url\ncrm software,1000,40,8,\n", encoding="utf-8")
+    (input_dir / "rival-com.csv").write_text(
+        "keyword,search_volume,difficulty,position,url\nfree crm,800,30,4,\n", encoding="utf-8")
+
+    returned = run_from_args(["keywords", "--job-dir", str(job_dir)])
+    assert returned == job_dir
+    data = load_data(returned)
+    assert [g.keyword for g in data.keywords.gaps] == ["free crm"]
