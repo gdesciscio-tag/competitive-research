@@ -84,6 +84,30 @@ The result (SEO title, meta description, heading outline, full body in Markdown,
 suggested internal links) is written to `data.json` under `draft_post`. The default
 model is `claude-opus-4-8`.
 
+## Render the branded PDF report
+
+The render module turns a job's finished `data.json` into a branded TAG Online PDF report.
+It works with whatever analysis sections are present (run sitemap/keywords/topical-map/draft-post first for a complete report).
+
+**One-time setup for real PDF output** (the test suite does not need this):
+
+```
+.venv\Scripts\python -m playwright install chromium
+```
+
+**Generate the report:**
+
+```
+.venv\Scripts\python -m compresearch.cli render --job-dir jobs\acme-co
+```
+
+The PDF is written to `jobs\<slug>\outputs\<slug>-competitive-research.pdf` and its path is
+recorded in `data.json` under `render`.
+
+**Branding:** copy `compresearch\branding.example.json` to `compresearch\branding.json` and
+edit the colors, fonts, and `logo_path` to your real TAG Online assets. Without it, the report
+uses clean built-in defaults and a text logo.
+
 ## Test
 
 ```
@@ -97,5 +121,5 @@ model is `claude-opus-4-8`.
 - [x] Keywords module
 - [x] Topical map module
 - [x] Draft post module
-- [ ] Render module (Google Sheet + PDF)
+- [x] Render module (branded PDF) — Google Sheet appendix pending
 - [ ] Orchestrator + Claude Code skill
