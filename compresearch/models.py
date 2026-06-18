@@ -146,6 +146,11 @@ class Branding(BaseModel):
     logo_path: str | None = None     # None -> the agency name is rendered as a text logo
 
 
+class RenderResult(BaseModel):
+    pdf_path: str | None = None
+    error: str | None = None
+
+
 class JobConfig(BaseModel):
     client_name: str
     client_url: str
@@ -176,3 +181,4 @@ class JobData(BaseModel):
     keywords: KeywordResult | None = None
     topical_map: TopicalMapResult | None = None
     draft_post: DraftPostResult | None = None
+    render: RenderResult | None = None
