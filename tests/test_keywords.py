@@ -145,17 +145,7 @@ from compresearch.keywords import analyze_keywords
 from compresearch.models import KeywordEntry
 
 
-def make_provider(domain_to_entries):
-    """Fake Provider: dict of domain_key -> list[KeywordEntry]; raises for unknowns."""
-    def provider(domain):
-        key = _domain_key(domain)
-        if key not in domain_to_entries:
-            raise RuntimeError(f"no data for {key}")
-        return domain_to_entries[key]
-    return provider
-
-
-def test_analyze_keywords_gaps_and_quick_wins():
+def test_analyze_keywords_gaps_and_quick_wins(make_provider):
     provider = make_provider({
         "acme.com": [
             KeywordEntry(keyword="crm software", search_volume=1000, position=8, url="https://acme.com/crm"),
@@ -180,7 +170,7 @@ def test_analyze_keywords_gaps_and_quick_wins():
     assert result.is_partial is False
 
 
-def test_analyze_keywords_marks_partial_and_skips_gaps_on_client_failure():
+def test_analyze_keywords_marks_partial_and_skips_gaps_on_client_failure(make_provider):
     provider = make_provider({
         "rival.com": [KeywordEntry(keyword="free crm", search_volume=800, position=4)],
     })  # acme.com missing -> client lookup fails
@@ -196,7 +186,7 @@ from compresearch.job_store import create_job, load_data
 from compresearch.models import JobConfig
 
 
-def test_run_keywords_with_injected_provider(tmp_path):
+def test_run_keywords_with_injected_provider(tmp_path, make_provider):
     cfg = JobConfig(client_name="Acme Co", client_url="https://acme.com",
                     competitor_urls=["https://rival.com"])
     job_dir = create_job(cfg, jobs_dir=tmp_path)
@@ -232,7 +222,7 @@ def test_run_keywords_manual_source_reads_input_dir(tmp_path):
     assert [g.keyword for g in data.keywords.gaps] == ["free crm"]
 
 
-def test_analyze_keywords_multi_competitor_gap_aggregation():
+def test_analyze_keywords_multi_competitor_gap_aggregation(make_provider):
     provider = make_provider({
         "acme.com": [],
         "rival1.com": [KeywordEntry(keyword="free crm", search_volume=800, position=5)],
@@ -260,7 +250,7 @@ def test_domain_to_filename():
     assert _domain_to_filename("sub.acme.co.uk") == "sub-acme-co-uk"
 
 
-def test_quick_wins_sorted_by_traffic_value():
+def test_quick_wins_sorted_by_traffic_value(make_provider):
     provider = make_provider({
         "acme.com": [
             KeywordEntry(keyword="low value", search_volume=2000, position=19),  # ~20
@@ -271,7 +261,7 @@ def test_quick_wins_sorted_by_traffic_value():
     assert [w.keyword for w in result.quick_wins] == ["high value", "low value"]
 
 
-def test_gap_search_volume_uses_max_across_competitors():
+def test_gap_search_volume_uses_max_across_competitors(make_provider):
     provider = make_provider({
         "acme.com": [],
         "rival1.com": [KeywordEntry(keyword="free crm", search_volume=100, position=6)],
@@ -284,7 +274,7 @@ def test_gap_search_volume_uses_max_across_competitors():
     assert result.gaps[0].search_volume == 5000
 
 
-def test_analyze_keywords_partial_competitor_failure_still_yields_gaps():
+def test_analyze_keywords_partial_competitor_failure_still_yields_gaps(make_provider):
     provider = make_provider({
         "acme.com": [KeywordEntry(keyword="crm", search_volume=1000, position=2)],
         "rival1.com": [KeywordEntry(keyword="free crm", search_volume=800, position=4)],
