@@ -1,13 +1,12 @@
 # compresearch/render.py
 from __future__ import annotations
 
+import logging
+from pathlib import Path
 from urllib.parse import urlparse
 from xml.sax.saxutils import escape
 
-import logging
 import markdown
-from pathlib import Path
-
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 from compresearch.branding import load_branding
