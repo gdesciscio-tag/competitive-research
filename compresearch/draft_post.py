@@ -50,6 +50,8 @@ def _select_style_urls(urls: list[str], max_samples: int) -> list[str]:
 
 def _extract_text(content: bytes) -> str:
     """Strip scripts/styles and collapse a page's visible text to a single string."""
+    if not content:
+        return ""
     doc = lxml_html.fromstring(content)
     for element in doc.xpath("//script | //style"):
         parent = element.getparent()

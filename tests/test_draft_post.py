@@ -206,3 +206,18 @@ def test_run_draft_post_uses_style_sample_override(tmp_path):
     post = DraftPost(title="What is a CRM?", body_markdown="# hi")
     run_draft_post(job_dir, generator=make_draft_generator(captured, post=post))
     assert "Punchy. Direct. No fluff." in captured[0]  # override used, no fetch needed
+
+
+def test_extract_text_empty_bytes_returns_empty():
+    from compresearch.draft_post import _extract_text
+    assert _extract_text(b"") == ""
+
+
+def test_fetch_style_samples_skips_empty_body():
+    fetch = make_fetch({"https://acme.com/blog/x": b""})
+    assert fetch_style_samples(["https://acme.com/blog/x"], fetch) == []
+
+
+def test_select_topic_preferred_keyword_miss_falls_back_to_volume():
+    # 'nonexistent' matches nothing -> falls back to the highest-volume article
+    assert select_topic(_map(), preferred_keyword="nonexistent").target_keyword == "high"
