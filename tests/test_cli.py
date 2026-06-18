@@ -83,15 +83,6 @@ def test_topical_map_subcommand_missing_api_key_exits_cleanly(tmp_path, monkeypa
     assert exc.value.code == 1
 
 
-def _fake_draft_generator(result):
-    class FakeDraftGenerator:
-        model = "fake-draft-model"
-
-        def __call__(self, prompt):
-            return result
-    return FakeDraftGenerator()
-
-
 def _seed_job_with_topical_map(tmp_path):
     """Create a job that has a topical map but NO sitemap — fully offline (no style fetch)."""
     cfg = JobConfig(client_name="Acme Co", client_url="https://acme.com",
@@ -112,7 +103,7 @@ def _seed_job_with_topical_map(tmp_path):
     return job_dir
 
 
-def test_draft_post_subcommand(tmp_path):
+def test_draft_post_subcommand(tmp_path, make_draft_generator):
     job_dir = _seed_job_with_topical_map(tmp_path)
     fake_post = DraftPost(
         title="What is a CRM?",
@@ -122,7 +113,7 @@ def test_draft_post_subcommand(tmp_path):
 
     returned = run_from_args(
         ["draft-post", "--job-dir", str(job_dir)],
-        draft_generator=_fake_draft_generator(fake_post),
+        draft_generator=make_draft_generator([], post=fake_post),
     )
     assert returned == job_dir
     data = load_data(returned)

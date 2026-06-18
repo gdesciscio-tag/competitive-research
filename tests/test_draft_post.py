@@ -1,6 +1,17 @@
 # tests/test_draft_post.py
-from compresearch.draft_post import select_topic
-from compresearch.models import TopicalMap, PillarTopic, TopicCluster, ArticleIdea
+from compresearch.draft_post import (
+    select_topic,
+    _select_style_urls,
+    fetch_style_samples,
+    build_draft_post_prompt,
+    run_draft_post,
+)
+from compresearch.job_store import create_job, load_data, save_data
+from compresearch.models import (
+    TopicalMap, PillarTopic, TopicCluster, ArticleIdea,
+    JobConfig, SitemapResult, DomainSitemap, UrlEntry,
+    TopicalMapResult, DraftPost, InternalLink,
+)
 
 
 def _map():
@@ -24,17 +35,6 @@ def test_select_topic_none_when_empty():
     assert select_topic(TopicalMap(pillars=[])) is None
 
 
-from compresearch.draft_post import _select_style_urls, fetch_style_samples
-
-
-def make_fetch(pages: dict[str, bytes]):
-    def fetch(url: str) -> bytes:
-        if url not in pages:
-            raise FileNotFoundError(url)
-        return pages[url]
-    return fetch
-
-
 BLOG_HTML = (
     b"<html><head><style>.x{color:red}</style></head>"
     b"<body><script>var a=1;</script>"
@@ -52,7 +52,7 @@ def test_select_style_urls_falls_back_to_non_root():
     assert _select_style_urls(urls, 3) == ["https://acme.com/about"]
 
 
-def test_fetch_style_samples_extracts_clean_text():
+def test_fetch_style_samples_extracts_clean_text(make_fetch):
     fetch = make_fetch({"https://acme.com/blog/crm-guide": BLOG_HTML})
     samples = fetch_style_samples(
         ["https://acme.com/blog/crm-guide", "https://acme.com/"], fetch
@@ -64,12 +64,9 @@ def test_fetch_style_samples_extracts_clean_text():
     assert "color:red" not in samples[0]  # style stripped
 
 
-def test_fetch_style_samples_skips_fetch_failures():
+def test_fetch_style_samples_skips_fetch_failures(make_fetch):
     fetch = make_fetch({})  # every fetch raises
     assert fetch_style_samples(["https://acme.com/blog/x"], fetch) == []
-
-
-from compresearch.draft_post import build_draft_post_prompt
 
 
 def test_prompt_includes_topic_style_and_links():
@@ -101,27 +98,6 @@ def test_prompt_handles_no_style_and_no_links():
     assert "empty internal_links" in prompt.lower()
 
 
-from compresearch.draft_post import run_draft_post
-from compresearch.job_store import create_job, load_data, save_data
-from compresearch.models import (
-    JobConfig, SitemapResult, DomainSitemap, UrlEntry,
-    TopicalMapResult, DraftPost, InternalLink,
-)
-
-
-def make_draft_generator(captured, post=None, raises=None, model="fake-model"):
-    class FakeGenerator:
-        def __init__(self):
-            self.model = model
-
-        def __call__(self, prompt):
-            captured.append(prompt)
-            if raises is not None:
-                raise raises
-            return post
-    return FakeGenerator()
-
-
 def _seed_draft_job(tmp_path, with_sitemap=True):
     cfg = JobConfig(
         client_name="Acme Co",
@@ -148,7 +124,7 @@ def _seed_draft_job(tmp_path, with_sitemap=True):
     return job_dir
 
 
-def test_run_draft_post_persists_and_filters_internal_links(tmp_path):
+def test_run_draft_post_persists_and_filters_internal_links(tmp_path, make_fetch, make_draft_generator):
     job_dir = _seed_draft_job(tmp_path)
     post = DraftPost(
         title="What is a CRM?",
@@ -177,7 +153,7 @@ def test_run_draft_post_persists_and_filters_internal_links(tmp_path):
     assert "https://acme.com/pricing" in captured[0]
 
 
-def test_run_draft_post_without_topical_map_records_error(tmp_path):
+def test_run_draft_post_without_topical_map_records_error(tmp_path, make_draft_generator):
     cfg = JobConfig(client_name="Acme Co", client_url="https://acme.com")
     job_dir = create_job(cfg, jobs_dir=tmp_path)
     captured = []
@@ -188,7 +164,7 @@ def test_run_draft_post_without_topical_map_records_error(tmp_path):
     assert captured == []  # generator never called when there's no topic
 
 
-def test_run_draft_post_captures_generator_error(tmp_path):
+def test_run_draft_post_captures_generator_error(tmp_path, make_draft_generator):
     job_dir = _seed_draft_job(tmp_path, with_sitemap=False)
     run_draft_post(job_dir, generator=make_draft_generator([], raises=RuntimeError("boom")))
     data = load_data(job_dir)
@@ -197,7 +173,7 @@ def test_run_draft_post_captures_generator_error(tmp_path):
     assert data.draft_post.selected_keyword == "what is a crm"
 
 
-def test_run_draft_post_uses_style_sample_override(tmp_path):
+def test_run_draft_post_uses_style_sample_override(tmp_path, make_draft_generator):
     job_dir = _seed_draft_job(tmp_path, with_sitemap=False)
     data = load_data(job_dir)
     data.config.style_sample = "Punchy. Direct. No fluff."
@@ -213,7 +189,7 @@ def test_extract_text_empty_bytes_returns_empty():
     assert _extract_text(b"") == ""
 
 
-def test_fetch_style_samples_skips_empty_body():
+def test_fetch_style_samples_skips_empty_body(make_fetch):
     fetch = make_fetch({"https://acme.com/blog/x": b""})
     assert fetch_style_samples(["https://acme.com/blog/x"], fetch) == []
 
