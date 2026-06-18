@@ -168,3 +168,21 @@ def test_jobconfig_style_sample_optional_and_jobdata_draft_post():
     cfg = JobConfig(client_name="X", client_url="https://x.com")
     assert cfg.style_sample is None
     assert JobData(config=cfg).draft_post is None
+
+
+def test_branding_defaults():
+    from compresearch.models import Branding
+    b = Branding()
+    assert b.agency_name == "TAG Online"
+    assert b.primary_color.startswith("#")
+    assert b.logo_path is None
+
+
+def test_render_result_and_jobdata_render():
+    from compresearch.models import RenderResult, JobConfig, JobData
+    r = RenderResult(pdf_path="jobs/acme-co/outputs/acme-co-competitive-research.pdf")
+    restored = RenderResult.model_validate_json(r.model_dump_json())
+    assert restored.pdf_path.endswith(".pdf")
+    assert restored.error is None
+    data = JobData(config=JobConfig(client_name="X", client_url="https://x.com"))
+    assert data.render is None
