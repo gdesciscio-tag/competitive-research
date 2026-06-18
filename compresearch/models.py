@@ -79,10 +79,41 @@ class KeywordResult(BaseModel):
     is_partial: bool = False
 
 
+class ArticleIdea(BaseModel):
+    title: str
+    target_keyword: str | None = None
+    search_intent: str | None = None
+    estimated_volume: int | None = None
+    rationale: str | None = None
+
+
+class TopicCluster(BaseModel):
+    name: str
+    articles: list[ArticleIdea] = Field(default_factory=list)
+
+
+class PillarTopic(BaseModel):
+    name: str
+    description: str | None = None
+    clusters: list[TopicCluster] = Field(default_factory=list)
+
+
+class TopicalMap(BaseModel):
+    pillars: list[PillarTopic] = Field(default_factory=list)
+    summary: str | None = None
+
+
+class TopicalMapResult(BaseModel):
+    map: TopicalMap | None = None
+    model: str | None = None
+    error: str | None = None
+
+
 class JobConfig(BaseModel):
     client_name: str
     client_url: str
     competitor_urls: list[str] = Field(default_factory=list)
+    business_description: str | None = None
     keyword_source: Literal["api", "manual"] = "api"
 
     @field_validator("client_url")
@@ -105,4 +136,5 @@ class JobData(BaseModel):
     config: JobConfig
     sitemap: SitemapResult | None = None
     keywords: KeywordResult | None = None
-    # Future sections (topical_map, draft_post) added in later plans.
+    topical_map: TopicalMapResult | None = None
+    # Future sections (draft_post) added in later plans.
