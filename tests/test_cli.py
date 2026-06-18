@@ -151,3 +151,35 @@ def test_render_subcommand(tmp_path):
     data = load_data(returned)
     assert data.render.pdf_path.endswith(".pdf")
     assert "Acme Co" in captured["html"]
+
+
+def test_sheet_subcommand(tmp_path):
+    from compresearch.models import SitemapResult, DomainSitemap
+    cfg = JobConfig(client_name="Acme Co", client_url="https://acme.com")
+    job_dir = create_job(cfg, jobs_dir=tmp_path)
+    data = load_data(job_dir)
+    data.sitemap = SitemapResult(client=DomainSitemap(domain="https://acme.com",
+                                                      section_counts={"blog": 5}, total_urls=5))
+    save_data(job_dir, data)
+
+    captured = {}
+
+    def fake_writer(title, tabs):
+        captured["title"] = title
+        return "https://docs.google.com/spreadsheets/d/FAKE"
+
+    returned = run_from_args(["sheet", "--job-dir", str(job_dir)], sheet_writer=fake_writer)
+    assert returned == job_dir
+    data = load_data(returned)
+    assert data.sheet.sheet_url.endswith("FAKE")
+    assert captured["title"].startswith("Acme Co")
+
+
+def test_sheet_subcommand_missing_credentials_exits_cleanly(tmp_path, monkeypatch):
+    monkeypatch.delenv("GOOGLE_SERVICE_ACCOUNT_JSON", raising=False)
+    monkeypatch.delenv("GOOGLE_SHARE_EMAIL", raising=False)
+    cfg = JobConfig(client_name="Acme Co", client_url="https://acme.com")
+    job_dir = create_job(cfg, jobs_dir=tmp_path)
+    with pytest.raises(SystemExit) as exc:
+        run_from_args(["sheet", "--job-dir", str(job_dir)])  # no writer -> from_settings
+    assert exc.value.code == 1
