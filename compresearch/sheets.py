@@ -133,7 +133,10 @@ class GoogleSheetWriter:
                     title=tab.name, rows=max(len(tab.rows) + 2, 10), cols=max(cols, 4)
                 )
             if tab.rows:
-                worksheet.update(range_name="A1", values=tab.rows)
+                # The Sheets API rejects empty inner rows ([]); render blank spacer rows
+                # as a single empty cell so both the layout and the API are satisfied.
+                safe_rows = [row if row else [""] for row in tab.rows]
+                worksheet.update(range_name="A1", values=safe_rows)
         spreadsheet.share(self.share_email, perm_type="user", role="writer")
         return spreadsheet.url
 
@@ -153,6 +156,16 @@ class GoogleSheetWriter:
 def run_sheet(job_dir, writer: SheetWriter | None = None) -> JobData:
     """Build the sheet model, write it to a Google Sheet, and record the URL in data.json."""
     data = load_data(job_dir)
+    if (
+        data.sitemap is None
+        and data.keywords is None
+        and data.topical_map is None
+        and data.draft_post is None
+    ):
+        logging.warning(
+            "Sheet for %s has no analysis sections yet; run the analysis modules first",
+            data.config.client_url,
+        )
     if writer is None:
         writer = GoogleSheetWriter.from_settings()
     title = f"{data.config.client_name} — Competitive Research"
