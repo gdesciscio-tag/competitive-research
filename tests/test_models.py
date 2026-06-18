@@ -137,3 +137,34 @@ def test_jobconfig_business_description_optional_and_jobdata_topical_map():
                      business_description="We sell CRM software")
     assert cfg2.business_description == "We sell CRM software"
     assert JobData(config=cfg).topical_map is None
+
+
+from compresearch.models import InternalLink, DraftPost, DraftPostResult
+
+
+def test_draft_post_models_round_trip():
+    result = DraftPostResult(
+        post=DraftPost(
+            title="What is a CRM?",
+            target_keyword="what is a crm",
+            title_tag="What Is a CRM? A Plain-English Guide",
+            meta_description="A clear guide to what a CRM is and why it matters.",
+            outline=["What a CRM does", "Who needs one"],
+            body_markdown="# What is a CRM?\n\nA CRM is...",
+            internal_links=[InternalLink(anchor="our pricing", url="https://acme.com/pricing")],
+            word_count=1200,
+        ),
+        model="claude-opus-4-8",
+        selected_keyword="what is a crm",
+    )
+    restored = DraftPostResult.model_validate_json(result.model_dump_json())
+    assert restored.post.internal_links[0].url == "https://acme.com/pricing"
+    assert restored.selected_keyword == "what is a crm"
+    assert restored.error is None
+
+
+def test_jobconfig_style_sample_optional_and_jobdata_draft_post():
+    from compresearch.models import JobConfig, JobData
+    cfg = JobConfig(client_name="X", client_url="https://x.com")
+    assert cfg.style_sample is None
+    assert JobData(config=cfg).draft_post is None

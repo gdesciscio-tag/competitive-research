@@ -63,6 +63,27 @@ Set `ANTHROPIC_API_KEY` in `.env`, optionally add a `business_description` to th
 The result (pillars → clusters → article ideas, each tied to a target keyword) is written
 to `data.json` under `topical_map`. The default model is `claude-sonnet-4-6`.
 
+## Run the draft-post module
+
+The draft-post module runs on a job that already has a topical map (run the topical-map
+module first so there is an article to draft). It calls the Claude API.
+
+Set `ANTHROPIC_API_KEY` in `.env`, then:
+
+```
+.venv\Scripts\python -m compresearch.cli draft-post --job-dir jobs\acme-co
+```
+
+To target a specific keyword instead of the highest-volume article:
+
+```
+.venv\Scripts\python -m compresearch.cli draft-post --job-dir jobs\acme-co --keyword "what is a crm"
+```
+
+The result (SEO title, meta description, heading outline, full body in Markdown, and
+suggested internal links) is written to `data.json` under `draft_post`. The default
+model is `claude-opus-4-8`.
+
 ## Test
 
 ```
@@ -75,6 +96,6 @@ to `data.json` under `topical_map`. The default model is `claude-sonnet-4-6`.
 - [x] Sitemap module
 - [x] Keywords module
 - [x] Topical map module
-- [ ] Draft post module
+- [x] Draft post module
 - [ ] Render module (Google Sheet + PDF)
 - [ ] Orchestrator + Claude Code skill

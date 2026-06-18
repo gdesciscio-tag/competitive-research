@@ -60,6 +60,27 @@ def make_fake_generator():
 
 
 @pytest.fixture
+def make_draft_generator():
+    """Factory for a fake draft-post generator.
+
+    Appends each prompt to ``captured`` so call sites can assert on the grounding
+    data; optionally returns ``post`` or raises ``raises`` to simulate errors.
+    """
+    def _make_draft_generator(captured, post=None, raises=None, model="fake-model"):
+        class FakeGenerator:
+            def __init__(self):
+                self.model = model
+
+            def __call__(self, prompt):
+                captured.append(prompt)
+                if raises is not None:
+                    raise raises
+                return post
+        return FakeGenerator()
+    return _make_draft_generator
+
+
+@pytest.fixture
 def urlset() -> bytes:
     """A urlset sitemap with three URLs and mixed lastmod formats."""
     return b"""<?xml version="1.0" encoding="UTF-8"?>

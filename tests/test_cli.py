@@ -2,9 +2,10 @@
 import pytest
 
 from compresearch.cli import run_from_args
-from compresearch.job_store import create_job, load_data
+from compresearch.job_store import create_job, load_data, save_data
 from compresearch.models import (
     JobConfig, TopicalMap, PillarTopic, TopicCluster, ArticleIdea,
+    TopicalMapResult, DraftPost,
 )
 
 
@@ -79,4 +80,51 @@ def test_topical_map_subcommand_missing_api_key_exits_cleanly(tmp_path, monkeypa
     job_dir = create_job(cfg, jobs_dir=tmp_path)
     with pytest.raises(SystemExit) as exc:
         run_from_args(["topical-map", "--job-dir", str(job_dir)])  # no generator -> from_settings
+    assert exc.value.code == 1
+
+
+def _seed_job_with_topical_map(tmp_path):
+    """Create a job that has a topical map but NO sitemap — fully offline (no style fetch)."""
+    cfg = JobConfig(client_name="Acme Co", client_url="https://acme.com",
+                    business_description="Acme sells CRM software")
+    job_dir = create_job(cfg, jobs_dir=tmp_path)
+    data = load_data(job_dir)
+    data.topical_map = TopicalMapResult(
+        map=TopicalMap(pillars=[PillarTopic(
+            name="CRM Basics",
+            clusters=[TopicCluster(name="Intro", articles=[
+                ArticleIdea(title="What is a CRM?", target_keyword="what is a crm",
+                            estimated_volume=2000),
+            ])],
+        )]),
+        model="fake-model",
+    )
+    save_data(job_dir, data)
+    return job_dir
+
+
+def test_draft_post_subcommand(tmp_path, make_draft_generator):
+    job_dir = _seed_job_with_topical_map(tmp_path)
+    fake_post = DraftPost(
+        title="What is a CRM?",
+        target_keyword="what is a crm",
+        body_markdown="# What is a CRM?\n\nA CRM is ...",
+    )
+
+    returned = run_from_args(
+        ["draft-post", "--job-dir", str(job_dir)],
+        draft_generator=make_draft_generator([], post=fake_post),
+    )
+    assert returned == job_dir
+    data = load_data(returned)
+    assert data.draft_post is not None
+    assert data.draft_post.post.title == "What is a CRM?"
+    assert data.draft_post.error is None
+
+
+def test_draft_post_subcommand_missing_api_key_exits_cleanly(tmp_path, monkeypatch):
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    job_dir = _seed_job_with_topical_map(tmp_path)
+    with pytest.raises(SystemExit) as exc:
+        run_from_args(["draft-post", "--job-dir", str(job_dir)])  # no draft_generator -> from_settings
     assert exc.value.code == 1

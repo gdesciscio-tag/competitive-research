@@ -5,6 +5,7 @@ import argparse
 import sys
 from pathlib import Path
 
+from compresearch.draft_post import run_draft_post, DraftGenerator
 from compresearch.job_store import create_job
 from compresearch.keywords import run_keywords, Provider
 from compresearch.models import JobConfig
@@ -12,7 +13,7 @@ from compresearch.sitemap import Fetcher, http_fetch, run_sitemap
 from compresearch.topical_map import run_topical_map, Generator
 
 
-def run_from_args(argv: list[str], fetch: Fetcher = http_fetch, provider=None, generator: Generator | None = None) -> Path:
+def run_from_args(argv: list[str], fetch: Fetcher = http_fetch, provider=None, generator: Generator | None = None, draft_generator: DraftGenerator | None = None) -> Path:
     """Parse args, create the job, run the requested module. Returns the job dir."""
     parser = argparse.ArgumentParser(prog="compresearch")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -28,6 +29,10 @@ def run_from_args(argv: list[str], fetch: Fetcher = http_fetch, provider=None, g
 
     tm = sub.add_parser("topical-map", help="Generate a topical map for an existing job")
     tm.add_argument("--job-dir", required=True)
+
+    dp = sub.add_parser("draft-post", help="Generate a draft blog post for an existing job")
+    dp.add_argument("--job-dir", required=True)
+    dp.add_argument("--keyword", default=None, help="Preferred keyword to draft (optional)")
 
     args = parser.parse_args(argv)
 
@@ -55,6 +60,15 @@ def run_from_args(argv: list[str], fetch: Fetcher = http_fetch, provider=None, g
         job_dir = Path(args.job_dir)
         try:
             run_topical_map(job_dir, generator=generator)
+        except (RuntimeError, ValueError, FileNotFoundError) as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            raise SystemExit(1)
+        return job_dir
+
+    if args.command == "draft-post":
+        job_dir = Path(args.job_dir)
+        try:
+            run_draft_post(job_dir, generator=draft_generator, fetch=fetch, preferred_keyword=args.keyword)
         except (RuntimeError, ValueError, FileNotFoundError) as exc:
             print(f"Error: {exc}", file=sys.stderr)
             raise SystemExit(1)
