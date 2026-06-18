@@ -197,3 +197,28 @@ def test_fetch_style_samples_skips_empty_body(make_fetch):
 def test_select_topic_preferred_keyword_miss_falls_back_to_volume():
     # 'nonexistent' matches nothing -> falls back to the highest-volume article
     assert select_topic(_map(), preferred_keyword="nonexistent").target_keyword == "high"
+
+
+def test_draft_generator_records_last_usage():
+    from compresearch.draft_post import ClaudeDraftPostGenerator
+    from compresearch.models import DraftPost
+
+    class _Usage:
+        input_tokens = 500
+        output_tokens = 2500
+
+    class _Resp:
+        parsed_output = DraftPost(title="t", body_markdown="b")
+        usage = _Usage()
+
+    class _Messages:
+        def parse(self, **kwargs):
+            return _Resp()
+
+    class _Client:
+        messages = _Messages()
+
+    gen = ClaudeDraftPostGenerator(client=_Client())
+    assert gen.last_usage is None
+    gen("prompt")
+    assert gen.last_usage == {"input_tokens": 500, "output_tokens": 2500}
