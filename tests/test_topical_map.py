@@ -1,5 +1,18 @@
 # tests/test_topical_map.py
-from compresearch.topical_map import build_topical_map_prompt
+import logging
+
+import pytest
+
+from compresearch.topical_map import (
+    build_topical_map_prompt,
+    run_topical_map,
+    ClaudeTopicalMapGenerator,
+)
+from compresearch.job_store import create_job, load_data, save_data
+from compresearch.models import (
+    JobConfig, SitemapResult, SitemapGap, DomainSitemap,
+    KeywordResult, KeywordGap, QuickWin, TopicalMap, PillarTopic, TopicCluster, ArticleIdea,
+)
 
 
 def test_prompt_includes_grounding_data():
@@ -32,27 +45,6 @@ def test_prompt_handles_missing_business_description():
     assert "infer" in prompt.lower()         # tells the model to infer context
 
 
-from compresearch.topical_map import run_topical_map
-from compresearch.job_store import create_job, load_data, save_data
-from compresearch.models import (
-    JobConfig, SitemapResult, SitemapGap, DomainSitemap,
-    KeywordResult, KeywordGap, QuickWin, TopicalMap, PillarTopic, TopicCluster, ArticleIdea,
-)
-
-
-def make_fake_generator(captured, result=None, raises=None, model="fake-model"):
-    class FakeGenerator:
-        def __init__(self):
-            self.model = model
-
-        def __call__(self, prompt):
-            captured.append(prompt)
-            if raises is not None:
-                raise raises
-            return result
-    return FakeGenerator()
-
-
 def _seed_job(tmp_path):
     cfg = JobConfig(
         client_name="Acme Co",
@@ -74,7 +66,7 @@ def _seed_job(tmp_path):
     return job_dir
 
 
-def test_run_topical_map_persists_result_and_grounds_prompt(tmp_path):
+def test_run_topical_map_persists_result_and_grounds_prompt(tmp_path, make_fake_generator):
     job_dir = _seed_job(tmp_path)
     fake_map = TopicalMap(pillars=[PillarTopic(
         name="CRM Basics",
@@ -96,7 +88,7 @@ def test_run_topical_map_persists_result_and_grounds_prompt(tmp_path):
     assert "blog" in captured[0]
 
 
-def test_run_topical_map_captures_generator_error(tmp_path):
+def test_run_topical_map_captures_generator_error(tmp_path, make_fake_generator):
     job_dir = _seed_job(tmp_path)
     captured = []
     run_topical_map(
@@ -111,8 +103,6 @@ def test_run_topical_map_captures_generator_error(tmp_path):
 
 
 def test_generator_raises_when_parsed_output_is_none():
-    from compresearch.topical_map import ClaudeTopicalMapGenerator
-
     class _Resp:
         parsed_output = None
         stop_reason = "refusal"
@@ -125,13 +115,11 @@ def test_generator_raises_when_parsed_output_is_none():
         messages = _Messages()
 
     gen = ClaudeTopicalMapGenerator(client=_Client())
-    import pytest
     with pytest.raises(RuntimeError):
         gen("some prompt")
 
 
-def test_run_topical_map_with_no_prior_modules_warns_and_persists(tmp_path, caplog):
-    import logging
+def test_run_topical_map_with_no_prior_modules_warns_and_persists(tmp_path, caplog, make_fake_generator):
     cfg = JobConfig(client_name="Acme Co", client_url="https://acme.com")
     job_dir = create_job(cfg, jobs_dir=tmp_path)
     fake_map = TopicalMap(pillars=[])
@@ -144,9 +132,7 @@ def test_run_topical_map_with_no_prior_modules_warns_and_persists(tmp_path, capl
     assert "no sitemap gaps and no keyword gaps" in caplog.text
 
 
-def test_no_gap_warning_when_keyword_gaps_present_without_sitemap(tmp_path, caplog):
-    import logging
-    from compresearch.models import KeywordResult, KeywordGap
+def test_no_gap_warning_when_keyword_gaps_present_without_sitemap(tmp_path, caplog, make_fake_generator):
     cfg = JobConfig(client_name="Acme Co", client_url="https://acme.com")
     job_dir = create_job(cfg, jobs_dir=tmp_path)
     data = load_data(job_dir)
@@ -160,7 +146,6 @@ def test_no_gap_warning_when_keyword_gaps_present_without_sitemap(tmp_path, capl
 
 
 def test_prompt_honors_empty_business_description():
-    from compresearch.topical_map import build_topical_map_prompt
     prompt = build_topical_map_prompt(
         client_url="https://acme.com",
         business_description="",
