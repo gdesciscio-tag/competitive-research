@@ -16,6 +16,7 @@ def test_traffic_value_uses_position_ctr():
 def test_traffic_value_none_when_inputs_missing():
     assert estimate_traffic_value(None, 5) is None
     assert estimate_traffic_value(1000, None) is None
+    assert estimate_traffic_value(1000, 0) is None
 
 
 from compresearch.keywords import parse_keyword_csv, make_manual_provider, _domain_key
@@ -229,3 +230,33 @@ def test_run_keywords_manual_source_reads_input_dir(tmp_path):
 
     data = load_data(job_dir)
     assert [g.keyword for g in data.keywords.gaps] == ["free crm"]
+
+
+def test_analyze_keywords_multi_competitor_gap_aggregation():
+    provider = make_provider({
+        "acme.com": [],
+        "rival1.com": [KeywordEntry(keyword="free crm", search_volume=800, position=5)],
+        "rival2.com": [KeywordEntry(keyword="free crm", search_volume=900, position=2)],
+    })
+    result = analyze_keywords(
+        "https://acme.com", ["https://rival1.com", "https://rival2.com"], provider
+    )
+    assert len(result.gaps) == 1
+    gap = result.gaps[0]
+    assert set(gap.competitors_ranking) == {"https://rival1.com", "https://rival2.com"}
+    assert gap.best_competitor_position == 2  # minimum across competitors
+    assert result.is_partial is False
+
+
+def test_analyze_keywords_partial_competitor_failure_still_yields_gaps():
+    provider = make_provider({
+        "acme.com": [KeywordEntry(keyword="crm", search_volume=1000, position=2)],
+        "rival1.com": [KeywordEntry(keyword="free crm", search_volume=800, position=4)],
+        # rival2.com missing -> provider raises -> captured as error
+    })
+    result = analyze_keywords(
+        "https://acme.com", ["https://rival1.com", "https://rival2.com"], provider
+    )
+    assert result.is_partial is True
+    assert result.gaps != []  # gaps from the successful competitor still computed
+    assert any(c.error for c in result.competitors)

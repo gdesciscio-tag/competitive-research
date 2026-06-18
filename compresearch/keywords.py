@@ -27,6 +27,8 @@ def estimate_traffic_value(volume: int | None, position: int | None) -> float | 
     """Estimate monthly clicks a keyword could yield at a given SERP position."""
     if volume is None or position is None:
         return None
+    if position <= 0:
+        return None
     if position <= 10:
         ctr = _CTR_BY_POSITION.get(position, 0.02)
     elif position <= 20:
@@ -265,6 +267,8 @@ def _provider_for_job(job_dir: Path, config: JobConfig) -> Provider:
             csv_path = input_dir / f"{slugify(key)}.csv"
             if csv_path.exists():
                 mapping[key] = str(csv_path)
+            else:
+                logging.warning("No keyword CSV found for %s at %s", key, csv_path)
         return make_manual_provider(mapping)
     return DataForSEOProvider.from_settings()
 
