@@ -36,3 +36,40 @@ def select_topic(
             if (article.target_keyword or "").lower() == needle or needle in article.title.lower():
                 return article
     return max(articles, key=lambda a: a.estimated_volume or 0)
+
+
+CONTENT_PATH_HINTS = ("blog", "article", "news", "post", "insight", "guide", "resource")
+
+
+def _select_style_urls(urls: list[str], max_samples: int) -> list[str]:
+    """Prefer content/blog-looking pages; fall back to any non-homepage URL."""
+    content = [u for u in urls if any(hint in u.lower() for hint in CONTENT_PATH_HINTS)]
+    pool = content or [u for u in urls if urlparse(u).path.strip("/")]
+    return pool[:max_samples]
+
+
+def _extract_text(content: bytes) -> str:
+    """Strip scripts/styles and collapse a page's visible text to a single string."""
+    doc = lxml_html.fromstring(content)
+    for element in doc.xpath("//script | //style"):
+        parent = element.getparent()
+        if parent is not None:
+            parent.remove(element)
+    return " ".join(doc.text_content().split())
+
+
+def fetch_style_samples(
+    client_urls: list[str], fetch: Fetcher, max_samples: int = 3, max_chars: int = 1500
+) -> list[str]:
+    """Fetch a few of the client's existing pages and return cleaned text snippets.
+    Never raises — pages that fail to fetch or parse are skipped with a warning."""
+    samples: list[str] = []
+    for url in _select_style_urls(client_urls, max_samples):
+        try:
+            text = _extract_text(fetch(url))
+        except Exception as exc:
+            logging.warning("Could not fetch style sample from %s: %s", url, exc)
+            continue
+        if text:
+            samples.append(text[:max_chars])
+    return samples
