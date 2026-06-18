@@ -104,6 +104,8 @@ class TopicalMap(BaseModel):
 
 
 class TopicalMapResult(BaseModel):
+    # No is_partial flag (unlike SitemapResult/KeywordResult): a topical map is one
+    # atomic LLM call, so success/failure is binary — see the `error` field.
     map: TopicalMap | None = None
     model: str | None = None
     error: str | None = None

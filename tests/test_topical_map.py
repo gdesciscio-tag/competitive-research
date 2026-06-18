@@ -141,4 +141,32 @@ def test_run_topical_map_with_no_prior_modules_warns_and_persists(tmp_path, capl
     data = load_data(job_dir)
     assert data.topical_map is not None
     assert data.topical_map.map is not None
-    assert "no sitemap or keyword gaps" in caplog.text
+    assert "no sitemap gaps and no keyword gaps" in caplog.text
+
+
+def test_no_gap_warning_when_keyword_gaps_present_without_sitemap(tmp_path, caplog):
+    import logging
+    from compresearch.models import KeywordResult, KeywordGap
+    cfg = JobConfig(client_name="Acme Co", client_url="https://acme.com")
+    job_dir = create_job(cfg, jobs_dir=tmp_path)
+    data = load_data(job_dir)
+    data.keywords = KeywordResult(gaps=[KeywordGap(keyword="free crm", search_volume=800)])
+    save_data(job_dir, data)
+    captured = []
+    fake_map = TopicalMap(pillars=[])
+    with caplog.at_level(logging.WARNING):
+        run_topical_map(job_dir, generator=make_fake_generator(captured, result=fake_map))
+    assert "no sitemap gaps and no keyword gaps" not in caplog.text
+
+
+def test_prompt_honors_empty_business_description():
+    from compresearch.topical_map import build_topical_map_prompt
+    prompt = build_topical_map_prompt(
+        client_url="https://acme.com",
+        business_description="",
+        existing_sections=[],
+        sitemap_gaps=[],
+        keyword_gaps=[],
+        quick_wins=[],
+    )
+    assert "infer" not in prompt.lower()   # explicit empty string is honored, not inferred

@@ -27,7 +27,7 @@ def build_topical_map_prompt(
         "for a client's content marketing programme.",
         f"\nClient website: {client_url}",
     ]
-    if business_description:
+    if business_description is not None:
         lines.append(f"Business description: {business_description}")
     else:
         lines.append(
@@ -148,9 +148,10 @@ def run_topical_map(job_dir: Path, generator: Generator | None = None) -> JobDat
         generator = ClaudeTopicalMapGenerator.from_settings()
 
     inputs = _gather_topical_inputs(data)
-    if not inputs[3] and not inputs[4]:  # no sitemap gaps and no keyword gaps
+    (_, _, _, sitemap_gaps, keyword_gaps, _) = inputs
+    if not sitemap_gaps and not keyword_gaps:
         logging.warning(
-            "Topical map for %s has no sitemap or keyword gaps to ground on; "
+            "Topical map for %s has no sitemap gaps and no keyword gaps to ground on; "
             "run the sitemap and keywords modules first for best results",
             data.config.client_url,
         )

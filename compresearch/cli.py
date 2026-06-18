@@ -9,10 +9,10 @@ from compresearch.job_store import create_job
 from compresearch.keywords import run_keywords, Provider
 from compresearch.models import JobConfig
 from compresearch.sitemap import Fetcher, http_fetch, run_sitemap
-from compresearch.topical_map import run_topical_map
+from compresearch.topical_map import run_topical_map, Generator
 
 
-def run_from_args(argv: list[str], fetch: Fetcher = http_fetch, provider: Provider | None = None, generator=None) -> Path:
+def run_from_args(argv: list[str], fetch: Fetcher = http_fetch, provider=None, generator: Generator | None = None) -> Path:
     """Parse args, create the job, run the requested module. Returns the job dir."""
     parser = argparse.ArgumentParser(prog="compresearch")
     sub = parser.add_subparsers(dest="command", required=True)
