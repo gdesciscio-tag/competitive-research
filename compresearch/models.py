@@ -156,6 +156,19 @@ class SheetResult(BaseModel):
     error: str | None = None
 
 
+class StepResult(BaseModel):
+    name: str
+    status: str  # "ok" | "failed" | "skipped"
+    error: str | None = None
+    duration_seconds: float | None = None
+    cost_usd: float | None = None
+
+
+class RunReport(BaseModel):
+    steps: list[StepResult] = Field(default_factory=list)
+    total_cost_usd: float = 0.0
+
+
 class JobConfig(BaseModel):
     client_name: str
     client_url: str
@@ -188,3 +201,4 @@ class JobData(BaseModel):
     draft_post: DraftPostResult | None = None
     render: RenderResult | None = None
     sheet: SheetResult | None = None
+    run_report: RunReport | None = None

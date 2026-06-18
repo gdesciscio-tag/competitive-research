@@ -196,3 +196,21 @@ def test_sheet_result_and_jobdata_sheet():
     assert restored.error is None
     data = JobData(config=JobConfig(client_name="X", client_url="https://x.com"))
     assert data.sheet is None
+
+
+def test_run_report_and_jobdata_run_report():
+    from compresearch.models import StepResult, RunReport, JobConfig, JobData
+    report = RunReport(
+        steps=[
+            StepResult(name="sitemap", status="ok", duration_seconds=1.2),
+            StepResult(name="topical_map", status="ok", duration_seconds=8.0, cost_usd=0.03),
+            StepResult(name="sheet", status="failed", error="quota", duration_seconds=0.5),
+        ],
+        total_cost_usd=0.03,
+    )
+    restored = RunReport.model_validate_json(report.model_dump_json())
+    assert restored.steps[1].cost_usd == 0.03
+    assert restored.steps[2].status == "failed"
+    assert restored.total_cost_usd == 0.03
+    data = JobData(config=JobConfig(client_name="X", client_url="https://x.com"))
+    assert data.run_report is None
