@@ -168,3 +168,11 @@ def test_jobconfig_style_sample_optional_and_jobdata_draft_post():
     cfg = JobConfig(client_name="X", client_url="https://x.com")
     assert cfg.style_sample is None
     assert JobData(config=cfg).draft_post is None
+
+
+def test_branding_defaults():
+    from compresearch.models import Branding
+    b = Branding()
+    assert b.agency_name == "TAG Online"
+    assert b.primary_color.startswith("#")
+    assert b.logo_path is None
