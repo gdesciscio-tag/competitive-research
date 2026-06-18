@@ -108,6 +108,26 @@ recorded in `data.json` under `render`.
 edit the colors, fonts, and `logo_path` to your real TAG Online assets. Without it, the report
 uses clean built-in defaults and a text logo.
 
+## Create the Google Sheet appendix
+
+The sheet module turns a job's finished `data.json` into a shared Google Sheet with tabs
+(Overview, Sitemap, Keyword Gaps, Quick Wins, Topical Map, Draft Post).
+
+**One-time setup:**
+1. In Google Cloud, create a service account and enable the Google Sheets API and Google Drive API.
+2. Download the service-account JSON key.
+3. In `.env`, set `GOOGLE_SERVICE_ACCOUNT_JSON` to the JSON file path and `GOOGLE_SHARE_EMAIL`
+   to the Google account that should own/see the sheets (each created sheet is shared with it
+   as editor and appears under "Shared with me").
+
+**Create the sheet:**
+
+```
+.venv\Scripts\python -m compresearch.cli sheet --job-dir jobs\acme-co
+```
+
+The shareable URL is recorded in `data.json` under `sheet`.
+
 ## Test
 
 ```
@@ -121,5 +141,5 @@ uses clean built-in defaults and a text logo.
 - [x] Keywords module
 - [x] Topical map module
 - [x] Draft post module
-- [x] Render module (branded PDF) — Google Sheet appendix pending
+- [x] Render module (branded PDF + Google Sheet)
 - [ ] Orchestrator + Claude Code skill
