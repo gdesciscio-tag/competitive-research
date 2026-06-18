@@ -81,3 +81,17 @@ def test_jobdata_has_optional_keywords():
     from compresearch.models import JobConfig, JobData
     data = JobData(config=JobConfig(client_name="X", client_url="https://x.com"))
     assert data.keywords is None
+
+
+def test_jobconfig_rejects_invalid_url():
+    import pytest
+    from pydantic import ValidationError
+    with pytest.raises(ValidationError):
+        JobConfig(client_name="X", client_url="https://")
+    with pytest.raises(ValidationError):
+        JobConfig(client_name="X", client_url="https://x.com", competitor_urls=[""])
+
+
+def test_jobconfig_accepts_bare_domain():
+    cfg = JobConfig(client_name="X", client_url="acme.com", competitor_urls=["rival.com"])
+    assert cfg.client_url == "acme.com"

@@ -40,6 +40,17 @@ from compresearch.job_store import create_job
 from compresearch.models import JobConfig
 
 
+def test_keywords_subcommand_api_mode_missing_credentials_exits_cleanly(tmp_path, monkeypatch):
+    monkeypatch.delenv("DATAFORSEO_LOGIN", raising=False)
+    monkeypatch.delenv("DATAFORSEO_PASSWORD", raising=False)
+    cfg = JobConfig(client_name="Acme Co", client_url="https://acme.com", keyword_source="api")
+    job_dir = create_job(cfg, jobs_dir=tmp_path)
+    import pytest
+    with pytest.raises(SystemExit) as exc:
+        run_from_args(["keywords", "--job-dir", str(job_dir)])
+    assert exc.value.code == 1
+
+
 def test_keywords_subcommand_manual_mode(tmp_path):
     cfg = JobConfig(client_name="Acme Co", client_url="https://acme.com",
                     competitor_urls=["https://rival.com"], keyword_source="manual")

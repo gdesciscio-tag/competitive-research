@@ -3,8 +3,13 @@ from __future__ import annotations
 
 from datetime import date
 from typing import Literal
+from urllib.parse import urlparse
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+
+
+def _has_host(url: str) -> bool:
+    return bool(urlparse(url if "://" in url else "https://" + url).netloc)
 
 
 class UrlEntry(BaseModel):
@@ -79,6 +84,21 @@ class JobConfig(BaseModel):
     client_url: str
     competitor_urls: list[str] = Field(default_factory=list)
     keyword_source: Literal["api", "manual"] = "api"
+
+    @field_validator("client_url")
+    @classmethod
+    def _client_url_has_host(cls, value: str) -> str:
+        if not _has_host(value):
+            raise ValueError(f"client_url is not a valid URL: {value!r}")
+        return value
+
+    @field_validator("competitor_urls")
+    @classmethod
+    def _competitor_urls_have_host(cls, value: list[str]) -> list[str]:
+        for url in value:
+            if not _has_host(url):
+                raise ValueError(f"competitor_url is not a valid URL: {url!r}")
+        return value
 
 
 class JobData(BaseModel):

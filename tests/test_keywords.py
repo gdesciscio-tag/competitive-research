@@ -248,6 +248,42 @@ def test_analyze_keywords_multi_competitor_gap_aggregation():
     assert result.is_partial is False
 
 
+def test_domain_key_rejects_url_without_host():
+    import pytest
+    with pytest.raises(ValueError):
+        _domain_key("https://")
+
+
+def test_domain_to_filename():
+    from compresearch.keywords import _domain_to_filename
+    assert _domain_to_filename("acme.com") == "acme-com"
+    assert _domain_to_filename("sub.acme.co.uk") == "sub-acme-co-uk"
+
+
+def test_quick_wins_sorted_by_traffic_value():
+    provider = make_provider({
+        "acme.com": [
+            KeywordEntry(keyword="low value", search_volume=2000, position=19),  # ~20
+            KeywordEntry(keyword="high value", search_volume=500, position=5),   # ~30
+        ],
+    })
+    result = analyze_keywords("https://acme.com", [], provider)
+    assert [w.keyword for w in result.quick_wins] == ["high value", "low value"]
+
+
+def test_gap_search_volume_uses_max_across_competitors():
+    provider = make_provider({
+        "acme.com": [],
+        "rival1.com": [KeywordEntry(keyword="free crm", search_volume=100, position=6)],
+        "rival2.com": [KeywordEntry(keyword="free crm", search_volume=5000, position=8)],
+    })
+    result = analyze_keywords(
+        "https://acme.com", ["https://rival1.com", "https://rival2.com"], provider
+    )
+    assert len(result.gaps) == 1
+    assert result.gaps[0].search_volume == 5000
+
+
 def test_analyze_keywords_partial_competitor_failure_still_yields_gaps():
     provider = make_provider({
         "acme.com": [KeywordEntry(keyword="crm", search_volume=1000, position=2)],

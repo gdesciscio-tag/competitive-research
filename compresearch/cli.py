@@ -6,12 +6,12 @@ import sys
 from pathlib import Path
 
 from compresearch.job_store import create_job
-from compresearch.keywords import run_keywords
+from compresearch.keywords import run_keywords, Provider
 from compresearch.models import JobConfig
 from compresearch.sitemap import Fetcher, http_fetch, run_sitemap
 
 
-def run_from_args(argv: list[str], fetch: Fetcher = http_fetch, provider=None) -> Path:
+def run_from_args(argv: list[str], fetch: Fetcher = http_fetch, provider: Provider | None = None) -> Path:
     """Parse args, create the job, run the requested module. Returns the job dir."""
     parser = argparse.ArgumentParser(prog="compresearch")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -40,7 +40,11 @@ def run_from_args(argv: list[str], fetch: Fetcher = http_fetch, provider=None) -
 
     if args.command == "keywords":
         job_dir = Path(args.job_dir)
-        run_keywords(job_dir, provider=provider)
+        try:
+            run_keywords(job_dir, provider=provider)
+        except (RuntimeError, ValueError, FileNotFoundError) as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            raise SystemExit(1)
         return job_dir
 
     raise ValueError(f"Unknown command: {args.command}")  # pragma: no cover

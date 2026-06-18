@@ -13,7 +13,7 @@ from compresearch.models import (
     JobConfig, JobData,
 )
 from compresearch.settings import get_secret
-from compresearch.job_store import load_data, save_data, slugify
+from compresearch.job_store import load_data, save_data
 
 # Approximate average organic click-through rate by SERP position.
 # Used only to rank opportunities relative to each other, not as a traffic promise.
@@ -44,7 +44,14 @@ Provider = Callable[[str], list[KeywordEntry]]
 def _domain_key(url: str) -> str:
     """Netloc without scheme or leading 'www.' — used for matching and filenames."""
     netloc = urlparse(url if "://" in url else "https://" + url).netloc.lower()
+    if not netloc:
+        raise ValueError(f"Cannot extract a domain from URL: {url!r}")
     return netloc[4:] if netloc.startswith("www.") else netloc
+
+
+def _domain_to_filename(domain_key: str) -> str:
+    """Map a domain key to its manual-CSV filename stem (dots -> hyphens)."""
+    return domain_key.replace(".", "-")
 
 
 def _to_int(value: str | None) -> int | None:
@@ -210,8 +217,8 @@ def _find_keyword_gaps(
                 or entry.position < gap.best_competitor_position
             ):
                 gap.best_competitor_position = entry.position
-            if gap.search_volume is None:
-                gap.search_volume = entry.search_volume
+            if entry.search_volume is not None:
+                gap.search_volume = max(gap.search_volume or 0, entry.search_volume)
             if gap.difficulty is None:
                 gap.difficulty = entry.difficulty
 
@@ -235,7 +242,7 @@ def _find_quick_wins(client: DomainKeywords) -> list[QuickWin]:
         for entry in client.keywords
         if entry.position is not None and 5 <= entry.position <= 20
     ]
-    wins.sort(key=lambda w: w.search_volume or 0, reverse=True)
+    wins.sort(key=lambda w: w.traffic_value or 0, reverse=True)
     return wins
 
 
@@ -264,13 +271,15 @@ def _provider_for_job(job_dir: Path, config: JobConfig) -> Provider:
         mapping: dict[str, str] = {}
         for url in [config.client_url, *config.competitor_urls]:
             key = _domain_key(url)
-            csv_path = input_dir / f"{slugify(key)}.csv"
+            csv_path = input_dir / f"{_domain_to_filename(key)}.csv"
             if csv_path.exists():
                 mapping[key] = str(csv_path)
             else:
                 logging.warning("No keyword CSV found for %s at %s", key, csv_path)
         return make_manual_provider(mapping)
-    return DataForSEOProvider.from_settings()
+    if config.keyword_source == "api":
+        return DataForSEOProvider.from_settings()
+    raise ValueError(f"Unknown keyword_source: {config.keyword_source}")  # pragma: no cover
 
 
 def run_keywords(job_dir: Path, provider: Provider | None = None) -> JobData:
