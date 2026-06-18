@@ -112,7 +112,7 @@ def _seed_job_with_topical_map(tmp_path):
     return job_dir
 
 
-def test_draft_post_subcommand(tmp_path, make_fake_generator):
+def test_draft_post_subcommand(tmp_path):
     job_dir = _seed_job_with_topical_map(tmp_path)
     fake_post = DraftPost(
         title="What is a CRM?",
