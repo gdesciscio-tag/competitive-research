@@ -129,3 +129,103 @@ uses the primary keyword naturally in the title, opening, and headings. Include 
 internal links. Return the result in the required structured format."""
     )
     return "\n".join(lines)
+
+
+DEFAULT_DRAFT_POST_MODEL = "claude-opus-4-8"
+
+DraftGenerator = Callable[[str], DraftPost]
+
+
+class ClaudeDraftPostGenerator:
+    """Generates a DraftPost via the Claude API. The network call is isolated here so
+    the rest of the module tests offline with a fake generator."""
+
+    def __init__(
+        self,
+        client: anthropic.Anthropic | None = None,
+        model: str = DEFAULT_DRAFT_POST_MODEL,
+        max_tokens: int = 16000,
+    ) -> None:
+        self.client = client or anthropic.Anthropic()
+        self.model = model
+        self.max_tokens = max_tokens
+
+    def __call__(self, prompt: str) -> DraftPost:
+        response = self.client.messages.parse(
+            model=self.model,
+            max_tokens=self.max_tokens,
+            thinking={"type": "adaptive"},
+            messages=[{"role": "user", "content": prompt}],
+            output_format=DraftPost,
+        )
+        post = response.parsed_output
+        if post is None:
+            raise RuntimeError(
+                f"Claude returned no structured output (stop_reason="
+                f"{getattr(response, 'stop_reason', None)!r})"
+            )
+        return post
+
+    @classmethod
+    def from_settings(cls) -> "ClaudeDraftPostGenerator":
+        if not get_secret("ANTHROPIC_API_KEY"):
+            raise RuntimeError("ANTHROPIC_API_KEY must be set to generate a draft post")
+        return cls()
+
+
+def _client_urls(data: JobData) -> list[str]:
+    if data.sitemap is not None and data.sitemap.client is not None:
+        return [entry.loc for entry in data.sitemap.client.urls]
+    return []
+
+
+def run_draft_post(
+    job_dir: Path,
+    generator: DraftGenerator | None = None,
+    fetch: Fetcher = http_fetch,
+    preferred_keyword: str | None = None,
+) -> JobData:
+    """Select a topic, generate a style-matched draft, and persist it to data.json."""
+    data = load_data(job_dir)
+    if generator is None:
+        generator = ClaudeDraftPostGenerator.from_settings()
+    model = getattr(generator, "model", None)
+
+    topical_map = data.topical_map.map if data.topical_map is not None else None
+    article = select_topic(topical_map, preferred_keyword)
+    if article is None:
+        logging.warning(
+            "No topical-map article to draft for %s; run the topical-map module first",
+            data.config.client_url,
+        )
+        data.draft_post = DraftPostResult(
+            model=model, error="No topical-map article available to draft"
+        )
+        save_data(job_dir, data)
+        return data
+
+    candidates = _client_urls(data)
+    if data.config.style_sample:
+        style_samples = [data.config.style_sample]
+    else:
+        style_samples = fetch_style_samples(candidates, fetch) if candidates else []
+
+    prompt = build_draft_post_prompt(
+        title=article.title,
+        target_keyword=article.target_keyword,
+        search_intent=article.search_intent,
+        business_description=data.config.business_description,
+        style_samples=style_samples,
+        internal_link_candidates=candidates,
+    )
+    selected = article.target_keyword or article.title
+    try:
+        post = generator(prompt)
+        candidate_set = set(candidates)
+        post.internal_links = [link for link in post.internal_links if link.url in candidate_set]
+        data.draft_post = DraftPostResult(post=post, model=model, selected_keyword=selected)
+    except Exception as exc:
+        logging.warning("Draft post generation failed for %s: %s", data.config.client_url, exc)
+        data.draft_post = DraftPostResult(model=model, selected_keyword=selected, error=str(exc))
+    save_data(job_dir, data)
+    return data
