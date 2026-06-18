@@ -2,28 +2,19 @@
 from compresearch.sitemap import discover_sitemaps
 
 
-def make_fetch(pages: dict[str, bytes]):
-    """Build a fake fetcher backed by a dict; raises for unknown URLs."""
-    def fetch(url: str) -> bytes:
-        if url not in pages:
-            raise FileNotFoundError(url)
-        return pages[url]
-    return fetch
-
-
-def test_discover_reads_sitemaps_from_robots():
+def test_discover_reads_sitemaps_from_robots(make_fetch):
     fetch = make_fetch({
         "https://acme.com/robots.txt": b"User-agent: *\nSitemap: https://acme.com/sitemap_index.xml\n",
     })
     assert discover_sitemaps("https://acme.com", fetch) == ["https://acme.com/sitemap_index.xml"]
 
 
-def test_discover_falls_back_to_default_when_no_robots():
+def test_discover_falls_back_to_default_when_no_robots(make_fetch):
     fetch = make_fetch({})  # robots.txt fetch raises -> fallback
     assert discover_sitemaps("https://acme.com", fetch) == ["https://acme.com/sitemap.xml"]
 
 
-def test_discover_normalizes_bare_domain():
+def test_discover_normalizes_bare_domain(make_fetch):
     fetch = make_fetch({})
     assert discover_sitemaps("acme.com", fetch) == ["https://acme.com/sitemap.xml"]
 
@@ -32,21 +23,14 @@ import gzip as _gzip
 from datetime import date
 from compresearch.sitemap import fetch_sitemap_urls
 
-URLSET = b"""<?xml version="1.0" encoding="UTF-8"?>
-<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-  <url><loc>https://acme.com/blog/post-1</loc><lastmod>2026-01-10</lastmod></url>
-  <url><loc>https://acme.com/blog/post-2</loc><lastmod>2026-02-10T08:00:00+00:00</lastmod></url>
-  <url><loc>https://acme.com/about</loc></url>
-</urlset>"""
-
 INDEX = b"""<?xml version="1.0" encoding="UTF-8"?>
 <sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <sitemap><loc>https://acme.com/sitemap-posts.xml</loc></sitemap>
 </sitemapindex>"""
 
 
-def test_fetch_parses_urlset_with_lastmod():
-    fetch = make_fetch({"https://acme.com/sitemap.xml": URLSET})
+def test_fetch_parses_urlset_with_lastmod(make_fetch, urlset):
+    fetch = make_fetch({"https://acme.com/sitemap.xml": urlset})
     entries = fetch_sitemap_urls("https://acme.com/sitemap.xml", fetch)
     locs = [e.loc for e in entries]
     assert locs == [
@@ -59,17 +43,17 @@ def test_fetch_parses_urlset_with_lastmod():
     assert entries[2].lastmod is None
 
 
-def test_fetch_recurses_into_sitemap_index():
+def test_fetch_recurses_into_sitemap_index(make_fetch, urlset):
     fetch = make_fetch({
         "https://acme.com/sitemap_index.xml": INDEX,
-        "https://acme.com/sitemap-posts.xml": URLSET,
+        "https://acme.com/sitemap-posts.xml": urlset,
     })
     entries = fetch_sitemap_urls("https://acme.com/sitemap_index.xml", fetch)
     assert len(entries) == 3
 
 
-def test_fetch_handles_gzip():
-    fetch = make_fetch({"https://acme.com/sitemap.xml.gz": _gzip.compress(URLSET)})
+def test_fetch_handles_gzip(make_fetch, urlset):
+    fetch = make_fetch({"https://acme.com/sitemap.xml.gz": _gzip.compress(urlset)})
     entries = fetch_sitemap_urls("https://acme.com/sitemap.xml.gz", fetch)
     assert len(entries) == 3
 
@@ -111,10 +95,10 @@ def test_infer_cadence_needs_two_dates():
 from compresearch.sitemap import analyze_domain
 
 
-def test_analyze_domain_happy_path():
+def test_analyze_domain_happy_path(make_fetch, urlset):
     fetch = make_fetch({
         "https://acme.com/robots.txt": b"Sitemap: https://acme.com/sitemap.xml\n",
-        "https://acme.com/sitemap.xml": URLSET,
+        "https://acme.com/sitemap.xml": urlset,
     })
     result = analyze_domain("https://acme.com", fetch)
     assert result.error is None
@@ -123,7 +107,7 @@ def test_analyze_domain_happy_path():
     assert result.posts_per_month is not None
 
 
-def test_analyze_domain_captures_errors():
+def test_analyze_domain_captures_errors(make_fetch):
     fetch = make_fetch({})  # every fetch raises
     result = analyze_domain("https://broken.com", fetch)
     assert result.error is not None
@@ -132,25 +116,13 @@ def test_analyze_domain_captures_errors():
 
 from compresearch.sitemap import compare_domains
 
-CLIENT_MAP = b"""<?xml version="1.0" encoding="UTF-8"?>
-<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-  <url><loc>https://acme.com/blog/a</loc></url>
-</urlset>"""
 
-RIVAL_MAP = b"""<?xml version="1.0" encoding="UTF-8"?>
-<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-  <url><loc>https://rival.com/blog/a</loc></url>
-  <url><loc>https://rival.com/case-studies/x</loc></url>
-  <url><loc>https://rival.com/case-studies/y</loc></url>
-</urlset>"""
-
-
-def test_compare_domains_finds_gaps():
+def test_compare_domains_finds_gaps(make_fetch, client_map, rival_map):
     fetch = make_fetch({
         "https://acme.com/robots.txt": b"Sitemap: https://acme.com/sitemap.xml\n",
-        "https://acme.com/sitemap.xml": CLIENT_MAP,
+        "https://acme.com/sitemap.xml": client_map,
         "https://rival.com/robots.txt": b"Sitemap: https://rival.com/sitemap.xml\n",
-        "https://rival.com/sitemap.xml": RIVAL_MAP,
+        "https://rival.com/sitemap.xml": rival_map,
     })
     result = compare_domains("https://acme.com", ["https://rival.com"], fetch)
 
@@ -167,7 +139,7 @@ from compresearch.job_store import create_job, load_data
 from compresearch.models import JobConfig
 
 
-def test_run_sitemap_writes_results_to_data_json(tmp_path):
+def test_run_sitemap_writes_results_to_data_json(tmp_path, make_fetch, client_map, rival_map):
     cfg = JobConfig(
         client_name="Acme Co",
         client_url="https://acme.com",
@@ -177,9 +149,9 @@ def test_run_sitemap_writes_results_to_data_json(tmp_path):
 
     fetch = make_fetch({
         "https://acme.com/robots.txt": b"Sitemap: https://acme.com/sitemap.xml\n",
-        "https://acme.com/sitemap.xml": CLIENT_MAP,
+        "https://acme.com/sitemap.xml": client_map,
         "https://rival.com/robots.txt": b"Sitemap: https://rival.com/sitemap.xml\n",
-        "https://rival.com/sitemap.xml": RIVAL_MAP,
+        "https://rival.com/sitemap.xml": rival_map,
     })
     run_sitemap(job_dir, fetch=fetch)
 
@@ -189,11 +161,11 @@ def test_run_sitemap_writes_results_to_data_json(tmp_path):
     assert [g.section for g in data.sitemap.gaps] == ["case-studies"]
 
 
-def test_find_gaps_empty_when_client_failed():
+def test_find_gaps_empty_when_client_failed(make_fetch, rival_map):
     # client fetch fails entirely; only the competitor succeeds
     fetch = make_fetch({
         "https://rival.com/robots.txt": b"Sitemap: https://rival.com/sitemap.xml\n",
-        "https://rival.com/sitemap.xml": RIVAL_MAP,
+        "https://rival.com/sitemap.xml": rival_map,
     })
     result = compare_domains("https://acme.com", ["https://rival.com"], fetch)
     assert result.client.error is not None
@@ -201,10 +173,10 @@ def test_find_gaps_empty_when_client_failed():
     assert result.is_partial is True
 
 
-def test_compare_domains_is_partial_when_competitor_fails():
+def test_compare_domains_is_partial_when_competitor_fails(make_fetch, client_map):
     fetch = make_fetch({
         "https://acme.com/robots.txt": b"Sitemap: https://acme.com/sitemap.xml\n",
-        "https://acme.com/sitemap.xml": CLIENT_MAP,
+        "https://acme.com/sitemap.xml": client_map,
         # rival.com not in dict -> its fetches fail
     })
     result = compare_domains("https://acme.com", ["https://rival.com"], fetch)
@@ -213,12 +185,12 @@ def test_compare_domains_is_partial_when_competitor_fails():
     assert result.is_partial is True
 
 
-def test_clean_run_is_not_partial():
+def test_clean_run_is_not_partial(make_fetch, client_map, rival_map):
     fetch = make_fetch({
         "https://acme.com/robots.txt": b"Sitemap: https://acme.com/sitemap.xml\n",
-        "https://acme.com/sitemap.xml": CLIENT_MAP,
+        "https://acme.com/sitemap.xml": client_map,
         "https://rival.com/robots.txt": b"Sitemap: https://rival.com/sitemap.xml\n",
-        "https://rival.com/sitemap.xml": RIVAL_MAP,
+        "https://rival.com/sitemap.xml": rival_map,
     })
     result = compare_domains("https://acme.com", ["https://rival.com"], fetch)
     assert result.is_partial is False
