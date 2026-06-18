@@ -73,3 +73,59 @@ def fetch_style_samples(
         if text:
             samples.append(text[:max_chars])
     return samples
+
+
+def build_draft_post_prompt(
+    title: str,
+    target_keyword: str | None,
+    search_intent: str | None,
+    business_description: str | None,
+    style_samples: list[str],
+    internal_link_candidates: list[str],
+    max_candidates: int = 30,
+) -> str:
+    """Build the Claude prompt for a complete, style-matched blog post (deterministic)."""
+    lines: list[str] = [
+        "You are an expert content marketer and SEO copywriter. Write a complete, "
+        "publish-ready blog post for a client.",
+        f"\nWorking title: {title}",
+    ]
+    if target_keyword:
+        lines.append(f"Primary target keyword: {target_keyword}")
+    if search_intent:
+        lines.append(f"Search intent: {search_intent}")
+    if business_description:
+        lines.append(f"Client business: {business_description}")
+
+    if style_samples:
+        lines.append(
+            "\nMatch the voice, tone, vocabulary, sentence rhythm, and formatting of these "
+            "samples from the client's own existing content:"
+        )
+        for index, sample in enumerate(style_samples, 1):
+            lines.append(f"--- Sample {index} ---\n{sample}")
+    else:
+        lines.append(
+            "\nNo style samples are available; write in a clear, professional, engaging voice."
+        )
+
+    if internal_link_candidates:
+        lines.append(
+            "\nSuggest 2-5 internal links using ONLY these existing client URLs (choose the "
+            "most relevant, with natural anchor text). Do not invent or modify URLs:"
+        )
+        for url in internal_link_candidates[:max_candidates]:
+            lines.append(f"- {url}")
+    else:
+        lines.append(
+            "\nNo internal-link candidate URLs are available; return an empty internal_links list."
+        )
+
+    lines.append(
+        """
+Produce: an SEO title tag (<= 60 characters), a meta description (<= 160 characters), an
+outline of the H2/H3 headings, and the full body in Markdown (about 1000-1500 words) that
+uses the primary keyword naturally in the title, opening, and headings. Include the chosen
+internal links. Return the result in the required structured format."""
+    )
+    return "\n".join(lines)

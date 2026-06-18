@@ -67,3 +67,35 @@ def test_fetch_style_samples_extracts_clean_text():
 def test_fetch_style_samples_skips_fetch_failures():
     fetch = make_fetch({})  # every fetch raises
     assert fetch_style_samples(["https://acme.com/blog/x"], fetch) == []
+
+
+from compresearch.draft_post import build_draft_post_prompt
+
+
+def test_prompt_includes_topic_style_and_links():
+    prompt = build_draft_post_prompt(
+        title="What is a CRM?",
+        target_keyword="what is a crm",
+        search_intent="informational",
+        business_description="Acme sells CRM software",
+        style_samples=["We help teams close deals faster."],
+        internal_link_candidates=["https://acme.com/pricing", "https://acme.com/blog/crm-tips"],
+    )
+    assert "what is a crm" in prompt.lower()
+    assert "We help teams close deals faster." in prompt   # style sample surfaced
+    assert "https://acme.com/pricing" in prompt            # internal-link candidate surfaced
+    assert "internal link" in prompt.lower()
+    assert "meta description" in prompt.lower()
+
+
+def test_prompt_handles_no_style_and_no_links():
+    prompt = build_draft_post_prompt(
+        title="What is a CRM?",
+        target_keyword="what is a crm",
+        search_intent=None,
+        business_description=None,
+        style_samples=[],
+        internal_link_candidates=[],
+    )
+    assert "no style samples" in prompt.lower()
+    assert "empty internal_links" in prompt.lower()
