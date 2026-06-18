@@ -71,3 +71,55 @@ def test_build_sheet_model_converts_none_to_blank():
     data_row = kg.rows[1]
     assert None not in data_row
     assert data_row[0] == "bare"
+
+
+from compresearch.sheets import run_sheet, GoogleSheetWriter
+from compresearch.job_store import create_job, load_data, save_data
+import pytest
+
+
+def make_fake_writer(captured, url="https://docs.google.com/spreadsheets/d/FAKE", raises=None):
+    def writer(title, tabs):
+        captured["title"] = title
+        captured["tabs"] = tabs
+        if raises is not None:
+            raise raises
+        return url
+    return writer
+
+
+def test_run_sheet_persists_url_and_passes_model(tmp_path):
+    cfg = JobConfig(client_name="Acme Co", client_url="https://acme.com")
+    job_dir = create_job(cfg, jobs_dir=tmp_path)
+    data = _full_jobdata()
+    data.config = cfg
+    save_data(job_dir, data)
+
+    captured = {}
+    run_sheet(job_dir, writer=make_fake_writer(captured))
+
+    reloaded = load_data(job_dir)
+    assert reloaded.sheet is not None
+    assert reloaded.sheet.error is None
+    assert reloaded.sheet.sheet_url.endswith("FAKE")
+    assert captured["title"].startswith("Acme Co")
+    assert any(t.name == "Keyword Gaps" for t in captured["tabs"])
+
+
+def test_run_sheet_captures_writer_error(tmp_path):
+    cfg = JobConfig(client_name="Acme Co", client_url="https://acme.com")
+    job_dir = create_job(cfg, jobs_dir=tmp_path)
+    run_sheet(job_dir, writer=make_fake_writer({}, raises=RuntimeError("quota exceeded")))
+    data = load_data(job_dir)
+    assert data.sheet.sheet_url is None
+    assert "quota exceeded" in data.sheet.error
+
+
+def test_google_sheet_writer_from_settings_requires_credentials(monkeypatch):
+    monkeypatch.delenv("GOOGLE_SERVICE_ACCOUNT_JSON", raising=False)
+    monkeypatch.delenv("GOOGLE_SHARE_EMAIL", raising=False)
+    with pytest.raises(RuntimeError):
+        GoogleSheetWriter.from_settings()
+    monkeypatch.setenv("GOOGLE_SERVICE_ACCOUNT_JSON", "sa.json")
+    with pytest.raises(RuntimeError):   # share email still missing
+        GoogleSheetWriter.from_settings()
