@@ -114,7 +114,9 @@
 {% if draft %}
 <section class="page">
   <h2>Sample Blog Post</h2>
+  <h3>{{ draft.title }}</h3>
   <div class="draft">
+    {% if draft.title_tag %}<div class="meta"><strong>SEO title tag:</strong> {{ draft.title_tag }}</div>{% endif %}
     {% if draft.meta_description %}<div class="meta"><strong>Meta description:</strong> {{ draft.meta_description }}</div>{% endif %}
     {{ draft.body_html | safe }}
     {% if draft.internal_links %}

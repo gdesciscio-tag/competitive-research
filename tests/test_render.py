@@ -166,3 +166,23 @@ def test_run_render_captures_renderer_error(tmp_path):
     data = load_data(job_dir)
     assert data.render.pdf_path is None
     assert "chromium missing" in data.render.error
+
+
+def test_build_report_context_marks_partial():
+    data = _full_jobdata()
+    data.sitemap.is_partial = True
+    ctx = build_report_context(data, Branding())
+    assert ctx["summary"]["is_partial"] is True
+
+
+def test_render_report_html_shows_partial_note():
+    data = _full_jobdata()
+    data.keywords.is_partial = True
+    html = render_report_html(build_report_context(data, Branding()))
+    assert "partial-note" in html
+
+
+def test_render_report_html_shows_draft_title():
+    # the draft title renders as a heading even if the body has no H1
+    html = render_report_html(build_report_context(_full_jobdata(), Branding()))
+    assert "<h3>What is a CRM?</h3>" in html

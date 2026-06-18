@@ -41,6 +41,8 @@ def _bar_chart_svg(
     chart_w = width - 2 * pad
     gap = 16
     bar_w = (chart_w - gap * (count - 1)) / count if count else 0
+    # bar_color/text_color come from the trusted branding config (not user/LLM input),
+    # so they are interpolated into SVG attributes without escaping; labels ARE escaped.
     parts: list[str] = []
     for index, (label, value) in enumerate(zip(labels, values)):
         bar_h = (value / max_val) * chart_h
@@ -130,6 +132,9 @@ def build_report_context(data: JobData, branding: Branding, report_date: str | N
             "title": post.title,
             "title_tag": post.title_tag,
             "meta_description": post.meta_description,
+            # body_html is trusted LLM output, rendered with |safe in the template without
+            # sanitization. Trust boundary: LLM -> agency -> static client PDF. If this HTML
+            # is ever served to a browser or sourced from untrusted models, sanitize first.
             "body_html": markdown.markdown(post.body_markdown, extensions=["extra", "sane_lists"]),
             "internal_links": [{"anchor": l.anchor, "url": l.url} for l in post.internal_links],
         }
