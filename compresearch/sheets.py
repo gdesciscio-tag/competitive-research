@@ -7,7 +7,7 @@ from typing import Callable
 
 from compresearch.job_store import load_data, save_data
 from compresearch.models import JobData, SheetResult
-from compresearch.render import _short_domain
+from compresearch.utils import short_domain
 from compresearch.settings import get_secret
 
 
@@ -49,13 +49,13 @@ def build_sheet_model(data: JobData) -> list[SheetTab]:
         rows = [["Site", "Total pages", "Posts/month"]]
         if data.sitemap.client is not None:
             c = data.sitemap.client
-            rows.append([_short_domain(c.domain), c.total_urls, _cell(c.posts_per_month)])
+            rows.append([short_domain(c.domain), c.total_urls, _cell(c.posts_per_month)])
         for comp in data.sitemap.competitors:
-            rows.append([_short_domain(comp.domain), comp.total_urls, _cell(comp.posts_per_month)])
+            rows.append([short_domain(comp.domain), comp.total_urls, _cell(comp.posts_per_month)])
         if data.sitemap.gaps:
             rows += [[], ["Content gaps"], ["Section", "Competitors with it"]]
             for gap in data.sitemap.gaps:
-                rows.append([gap.section, ", ".join(_short_domain(d) for d in gap.competitors_with)])
+                rows.append([gap.section, ", ".join(short_domain(d) for d in gap.competitors_with)])
         tabs.append(SheetTab("Sitemap", rows))
 
     # --- Keywords ---
@@ -66,7 +66,7 @@ def build_sheet_model(data: JobData) -> list[SheetTab]:
             gap_rows.append([
                 g.keyword, _cell(g.search_volume), _cell(g.difficulty),
                 _cell(g.best_competitor_position), _cell(g.traffic_value),
-                ", ".join(_short_domain(d) for d in g.competitors_ranking),
+                ", ".join(short_domain(d) for d in g.competitors_ranking),
             ])
         tabs.append(SheetTab("Keyword Gaps", gap_rows))
 

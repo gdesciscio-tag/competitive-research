@@ -20,12 +20,13 @@ def test_load_branding_merges_override(tmp_path):
     assert b.primary_color.startswith("#")       # default preserved
 
 
-from compresearch.render import _bar_chart_svg, _short_domain
+from compresearch.render import _bar_chart_svg
+from compresearch.utils import short_domain
 
 
 def test_short_domain():
-    assert _short_domain("https://www.acme.com/blog") == "acme.com"
-    assert _short_domain("rival.com") == "rival.com"
+    assert short_domain("https://www.acme.com/blog") == "acme.com"
+    assert short_domain("rival.com") == "rival.com"
 
 
 def test_bar_chart_svg_renders_values_and_labels():

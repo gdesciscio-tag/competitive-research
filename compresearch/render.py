@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from urllib.parse import urlparse
 from xml.sax.saxutils import escape
 
 import markdown
@@ -12,15 +11,9 @@ from jinja2 import Environment, FileSystemLoader, select_autoescape
 from compresearch.branding import load_branding
 from compresearch.job_store import load_data, save_data, slugify
 from compresearch.models import Branding, JobData, RenderResult
+from compresearch.utils import short_domain
 
 TEMPLATES_DIR = Path(__file__).parent / "templates"
-
-
-def _short_domain(url: str) -> str:
-    """Netloc without scheme or leading 'www.', for chart/table labels."""
-    netloc = urlparse(url if "://" in url else "https://" + url).netloc.lower()
-    netloc = netloc[4:] if netloc.startswith("www.") else netloc
-    return netloc or url
 
 
 def _bar_chart_svg(
@@ -79,18 +72,18 @@ def build_report_context(data: JobData, branding: Branding, report_date: str | N
         if data.sitemap.client is not None:
             client_total = data.sitemap.client.total_urls
             sitemap_domains.append({
-                "domain": _short_domain(data.sitemap.client.domain),
+                "domain": short_domain(data.sitemap.client.domain),
                 "total": data.sitemap.client.total_urls,
                 "posts_per_month": data.sitemap.client.posts_per_month,
             })
         for comp in data.sitemap.competitors:
             sitemap_domains.append({
-                "domain": _short_domain(comp.domain),
+                "domain": short_domain(comp.domain),
                 "total": comp.total_urls,
                 "posts_per_month": comp.posts_per_month,
             })
         sitemap_gaps = [
-            {"section": g.section, "competitors": [_short_domain(d) for d in g.competitors_with]}
+            {"section": g.section, "competitors": [short_domain(d) for d in g.competitors_with]}
             for g in data.sitemap.gaps
         ]
 
@@ -102,7 +95,7 @@ def build_report_context(data: JobData, branding: Branding, report_date: str | N
         keyword_gaps = [
             {"keyword": g.keyword, "volume": g.search_volume, "difficulty": g.difficulty,
              "traffic_value": g.traffic_value, "best_position": g.best_competitor_position,
-             "competitors": [_short_domain(d) for d in g.competitors_ranking]}
+             "competitors": [short_domain(d) for d in g.competitors_ranking]}
             for g in data.keywords.gaps[:15]
         ]
         quick_wins = [
@@ -111,10 +104,10 @@ def build_report_context(data: JobData, branding: Branding, report_date: str | N
             for w in data.keywords.quick_wins[:10]
         ]
         if data.keywords.client is not None:
-            keyword_domains.append({"domain": _short_domain(data.keywords.client.domain),
+            keyword_domains.append({"domain": short_domain(data.keywords.client.domain),
                                     "total": data.keywords.client.total_keywords})
         for comp in data.keywords.competitors:
-            keyword_domains.append({"domain": _short_domain(comp.domain),
+            keyword_domains.append({"domain": short_domain(comp.domain),
                                     "total": comp.total_keywords})
 
     # --- topical map ---
