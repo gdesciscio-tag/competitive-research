@@ -128,3 +128,26 @@ def test_draft_post_subcommand_missing_api_key_exits_cleanly(tmp_path, monkeypat
     with pytest.raises(SystemExit) as exc:
         run_from_args(["draft-post", "--job-dir", str(job_dir)])  # no draft_generator -> from_settings
     assert exc.value.code == 1
+
+
+def test_render_subcommand(tmp_path):
+    from compresearch.models import SitemapResult, DomainSitemap
+    cfg = JobConfig(client_name="Acme Co", client_url="https://acme.com")
+    job_dir = create_job(cfg, jobs_dir=tmp_path)
+    data = load_data(job_dir)
+    data.sitemap = SitemapResult(client=DomainSitemap(domain="https://acme.com",
+                                                      section_counts={"blog": 5}, total_urls=5))
+    save_data(job_dir, data)
+
+    captured = {}
+
+    def fake_html_to_pdf(html, output_path):
+        captured["html"] = html
+        from pathlib import Path as _P
+        _P(output_path).write_text("PDF", encoding="utf-8")
+
+    returned = run_from_args(["render", "--job-dir", str(job_dir)], html_to_pdf=fake_html_to_pdf)
+    assert returned == job_dir
+    data = load_data(returned)
+    assert data.render.pdf_path.endswith(".pdf")
+    assert "Acme Co" in captured["html"]
