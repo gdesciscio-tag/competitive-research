@@ -1,5 +1,6 @@
 # tests/test_render.py
 import json
+from pathlib import Path
 
 from compresearch.branding import load_branding
 
@@ -122,3 +123,46 @@ def test_render_report_html_contains_key_sections():
     assert "<strong>helps</strong>" in html        # rendered draft body
     assert "<svg" in html                          # an embedded chart
     assert "#16314F" in html or "#E2703A" in html  # branding colors applied
+
+
+from compresearch.render import run_render
+from compresearch.job_store import create_job, load_data, save_data
+
+
+def test_run_render_writes_pdf_and_records_path(tmp_path):
+    cfg = JobConfig(client_name="Acme Co", client_url="https://acme.com",
+                    competitor_urls=["https://rival.com"])
+    job_dir = create_job(cfg, jobs_dir=tmp_path)
+    data = _full_jobdata()
+    data.config = cfg
+    save_data(job_dir, data)
+
+    captured = {}
+
+    def fake_html_to_pdf(html, output_path):
+        captured["html"] = html
+        captured["path"] = output_path
+        Path(output_path).write_text("PDF-STUB", encoding="utf-8")
+
+    run_render(job_dir, html_to_pdf=fake_html_to_pdf, report_date="June 17, 2026")
+
+    reloaded = load_data(job_dir)
+    assert reloaded.render is not None
+    assert reloaded.render.error is None
+    assert reloaded.render.pdf_path.endswith("acme-co-competitive-research.pdf")
+    assert Path(reloaded.render.pdf_path).exists()
+    assert "Acme Co" in captured["html"]      # the real report HTML was passed through
+    assert "free crm" in captured["html"]
+
+
+def test_run_render_captures_renderer_error(tmp_path):
+    cfg = JobConfig(client_name="Acme Co", client_url="https://acme.com")
+    job_dir = create_job(cfg, jobs_dir=tmp_path)
+
+    def boom(html, output_path):
+        raise RuntimeError("chromium missing")
+
+    run_render(job_dir, html_to_pdf=boom)
+    data = load_data(job_dir)
+    assert data.render.pdf_path is None
+    assert "chromium missing" in data.render.error

@@ -4,12 +4,15 @@ from __future__ import annotations
 from urllib.parse import urlparse
 from xml.sax.saxutils import escape
 
+import logging
 import markdown
 from pathlib import Path
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
-from compresearch.models import Branding, JobData
+from compresearch.branding import load_branding
+from compresearch.job_store import load_data, save_data, slugify
+from compresearch.models import Branding, JobData, RenderResult
 
 TEMPLATES_DIR = Path(__file__).parent / "templates"
 
@@ -174,3 +177,42 @@ def render_report_html(context: dict, templates_dir: Path = TEMPLATES_DIR) -> st
         autoescape=select_autoescape(["html", "xml"]),
     )
     return env.get_template("report.html.j2").render(**context)
+
+
+def render_pdf(html: str, output_path: Path) -> None:
+    """Render HTML to a PDF file via headless Chromium. Playwright is imported lazily so
+    the module (and the test suite) does not require it to be installed."""
+    from playwright.sync_api import sync_playwright
+
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch()
+        try:
+            page = browser.new_page()
+            page.set_content(html, wait_until="load")
+            page.pdf(
+                path=str(output_path),
+                format="A4",
+                print_background=True,
+                margin={"top": "0", "bottom": "0", "left": "0", "right": "0"},
+            )
+        finally:
+            browser.close()
+
+
+def run_render(job_dir, html_to_pdf=render_pdf, branding=None, report_date: str | None = None) -> JobData:
+    """Render a job's branded PDF report and record the output path in data.json."""
+    data = load_data(job_dir)
+    branding = branding or load_branding()
+    slug = slugify(data.config.client_name)
+    output_path = Path(job_dir) / "outputs" / f"{slug}-competitive-research.pdf"
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        context = build_report_context(data, branding, report_date=report_date)
+        html = render_report_html(context)
+        html_to_pdf(html, output_path)
+        data.render = RenderResult(pdf_path=str(output_path))
+    except Exception as exc:
+        logging.warning("PDF render failed for %s: %s", data.config.client_url, exc)
+        data.render = RenderResult(error=str(exc))
+    save_data(job_dir, data)
+    return data
