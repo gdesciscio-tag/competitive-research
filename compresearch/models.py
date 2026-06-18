@@ -111,11 +111,37 @@ class TopicalMapResult(BaseModel):
     error: str | None = None
 
 
+class InternalLink(BaseModel):
+    anchor: str
+    url: str
+
+
+class DraftPost(BaseModel):
+    title: str
+    target_keyword: str | None = None
+    title_tag: str | None = None
+    meta_description: str | None = None
+    outline: list[str] = Field(default_factory=list)
+    body_markdown: str
+    internal_links: list[InternalLink] = Field(default_factory=list)
+    word_count: int | None = None
+
+
+class DraftPostResult(BaseModel):
+    # No is_partial flag (like TopicalMapResult): one atomic LLM call — success/failure
+    # is binary, see the `error` field.
+    post: DraftPost | None = None
+    model: str | None = None
+    selected_keyword: str | None = None  # which topic was drafted
+    error: str | None = None
+
+
 class JobConfig(BaseModel):
     client_name: str
     client_url: str
     competitor_urls: list[str] = Field(default_factory=list)
     business_description: str | None = None
+    style_sample: str | None = None
     keyword_source: Literal["api", "manual"] = "api"
 
     @field_validator("client_url")
@@ -139,4 +165,4 @@ class JobData(BaseModel):
     sitemap: SitemapResult | None = None
     keywords: KeywordResult | None = None
     topical_map: TopicalMapResult | None = None
-    # Future sections (draft_post) added in later plans.
+    draft_post: DraftPostResult | None = None
