@@ -48,6 +48,21 @@ free crm,800,30,,
 
 Leave a numeric cell blank if unknown. Then run the same command above.
 
+## Run the topical-map module
+
+The topical map runs on a job that already has sitemap and keyword results (run those
+first so the map is grounded in real gaps). It calls the Claude API.
+
+Set `ANTHROPIC_API_KEY` in `.env`, optionally add a `business_description` to the job's
+`job.yaml`, then:
+
+```
+.venv\Scripts\python -m compresearch.cli topical-map --job-dir jobs\acme-co
+```
+
+The result (pillars → clusters → article ideas, each tied to a target keyword) is written
+to `data.json` under `topical_map`. The default model is `claude-sonnet-4-6`.
+
 ## Test
 
 ```
@@ -59,7 +74,7 @@ Leave a numeric cell blank if unknown. Then run the same command above.
 - [x] Foundation (job store, schema, settings)
 - [x] Sitemap module
 - [x] Keywords module
-- [ ] Topical map module
+- [x] Topical map module
 - [ ] Draft post module
 - [ ] Render module (Google Sheet + PDF)
 - [ ] Orchestrator + Claude Code skill
