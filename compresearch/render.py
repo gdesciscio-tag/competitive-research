@@ -5,8 +5,13 @@ from urllib.parse import urlparse
 from xml.sax.saxutils import escape
 
 import markdown
+from pathlib import Path
+
+from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 from compresearch.models import Branding, JobData
+
+TEMPLATES_DIR = Path(__file__).parent / "templates"
 
 
 def _short_domain(url: str) -> str:
@@ -160,3 +165,12 @@ def build_report_context(data: JobData, branding: Branding, report_date: str | N
         "draft": draft,
         "charts": {"content_volume_svg": content_volume_svg, "keyword_counts_svg": keyword_counts_svg},
     }
+
+
+def render_report_html(context: dict, templates_dir: Path = TEMPLATES_DIR) -> str:
+    """Render the branded report HTML from the context view-model."""
+    env = Environment(
+        loader=FileSystemLoader(str(templates_dir)),
+        autoescape=select_autoescape(["html", "xml"]),
+    )
+    return env.get_template("report.html.j2").render(**context)

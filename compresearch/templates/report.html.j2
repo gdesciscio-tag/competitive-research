@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<style>
+  :root {
+    --primary: {{ branding.primary_color }};
+    --accent: {{ branding.accent_color }};
+    --text: {{ branding.text_color }};
+    --muted: {{ branding.muted_color }};
+  }
+  * { box-sizing: border-box; }
+  body { font-family: {{ branding.font_family }}; color: var(--text); margin: 0; font-size: 12pt; line-height: 1.5; }
+  .page { padding: 48px 56px; page-break-after: always; }
+  .page:last-child { page-break-after: auto; }
+  h1, h2, h3 { color: var(--primary); margin: 0 0 12px; }
+  h1 { font-size: 30pt; }
+  h2 { font-size: 19pt; border-bottom: 3px solid var(--accent); padding-bottom: 6px; margin-top: 4px; }
+  h3 { font-size: 14pt; color: var(--accent); }
+  .cover { display: flex; flex-direction: column; justify-content: center; min-height: 80vh; }
+  .logo { font-size: 16pt; font-weight: bold; color: var(--accent); letter-spacing: 1px; text-transform: uppercase; }
+  .cover h1 { margin-top: 24px; }
+  .cover .sub { color: var(--muted); font-size: 14pt; }
+  .stat-grid { display: flex; gap: 16px; flex-wrap: wrap; margin: 16px 0; }
+  .stat { flex: 1; min-width: 130px; border: 1px solid #E4E7EB; border-top: 4px solid var(--accent); border-radius: 6px; padding: 14px 16px; }
+  .stat .n { font-size: 26pt; color: var(--primary); font-weight: bold; }
+  .stat .l { color: var(--muted); font-size: 10.5pt; }
+  table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 10.5pt; }
+  th { background: var(--primary); color: #fff; text-align: left; padding: 8px 10px; }
+  td { padding: 7px 10px; border-bottom: 1px solid #E4E7EB; }
+  tr:nth-child(even) td { background: #F5F7FA; }
+  .chart { margin: 16px 0; }
+  .muted { color: var(--muted); }
+  .pill { display: inline-block; background: #F0F2F5; border-radius: 12px; padding: 2px 10px; margin: 2px; font-size: 9.5pt; }
+  .draft { border: 1px solid #E4E7EB; border-radius: 8px; padding: 20px 24px; background: #FCFCFD; }
+  .draft .meta { color: var(--muted); font-size: 10pt; margin-bottom: 12px; }
+  .partial-note { background: #FFF4E5; border-left: 4px solid var(--accent); padding: 10px 14px; font-size: 10pt; margin: 12px 0; }
+  ul.links { padding-left: 18px; }
+</style>
+</head>
+<body>
+
+<section class="page cover">
+  {% if branding.logo_path %}<img class="logo-img" src="file:///{{ branding.logo_path }}" alt="{{ branding.agency_name }}" style="max-height:64px;">{% else %}<div class="logo">{{ branding.agency_name }}</div>{% endif %}
+  <h1>Competitive Research &amp; Analysis</h1>
+  <div class="sub">Prepared for <strong>{{ client_name }}</strong> &middot; {{ client_url }}</div>
+  {% if report_date %}<div class="sub">{{ report_date }}</div>{% endif %}
+</section>
+
+<section class="page">
+  <h2>Executive Summary</h2>
+  {% if summary.is_partial %}<div class="partial-note">Some data could not be fully retrieved; figures below reflect the data we were able to collect.</div>{% endif %}
+  <div class="stat-grid">
+    <div class="stat"><div class="n">{{ summary.competitor_count }}</div><div class="l">Competitors analyzed</div></div>
+    <div class="stat"><div class="n">{{ summary.content_gap_count }}</div><div class="l">Content gaps found</div></div>
+    <div class="stat"><div class="n">{{ summary.keyword_gap_count }}</div><div class="l">Keyword gaps</div></div>
+    <div class="stat"><div class="n">{{ summary.quick_win_count }}</div><div class="l">Quick wins</div></div>
+  </div>
+  <p>This report compares <strong>{{ client_name }}</strong> against {{ summary.competitor_count }} competitor(s) across site content, keyword rankings, and content-strategy opportunities, and includes a sample blog post demonstrating recommended content quality.</p>
+</section>
+
+<section class="page">
+  <h2>Competitive Landscape</h2>
+  {% if charts.content_volume_svg %}<h3>Total indexed pages by site</h3><div class="chart">{{ charts.content_volume_svg | safe }}</div>{% endif %}
+  {% if charts.keyword_counts_svg %}<h3>Ranking keywords by site</h3><div class="chart">{{ charts.keyword_counts_svg | safe }}</div>{% endif %}
+</section>
+
+<section class="page">
+  <h2>Content &amp; Sitemap Findings</h2>
+  {% if sitemap.domains %}
+  <table>
+    <tr><th>Site</th><th>Total pages</th><th>Est. posts / month</th></tr>
+    {% for d in sitemap.domains %}<tr><td>{{ d.domain }}</td><td>{{ d.total }}</td><td>{% if d.posts_per_month is not none %}{{ d.posts_per_month }}{% else %}&mdash;{% endif %}</td></tr>{% endfor %}
+  </table>
+  {% endif %}
+  {% if sitemap.gaps %}
+  <h3>Content-type gaps</h3>
+  <p class="muted">Sections competitors publish that {{ client_name }} does not:</p>
+  {% for g in sitemap.gaps %}<span class="pill">{{ g.section }} &middot; {{ g.competitors | join(', ') }}</span>{% endfor %}
+  {% else %}<p class="muted">No major content-type gaps detected.</p>{% endif %}
+</section>
+
+<section class="page">
+  <h2>Keyword Findings &amp; Gaps</h2>
+  {% if keywords.gaps %}
+  <h3>Top keyword gaps</h3>
+  <table>
+    <tr><th>Keyword</th><th>Volume</th><th>Difficulty</th><th>Best competitor rank</th><th>Est. value</th></tr>
+    {% for k in keywords.gaps %}<tr><td>{{ k.keyword }}</td><td>{% if k.volume is not none %}{{ k.volume }}{% else %}&mdash;{% endif %}</td><td>{% if k.difficulty is not none %}{{ k.difficulty }}{% else %}&mdash;{% endif %}</td><td>{% if k.best_position is not none %}#{{ k.best_position }}{% else %}&mdash;{% endif %}</td><td>{% if k.traffic_value is not none %}{{ k.traffic_value }}{% else %}&mdash;{% endif %}</td></tr>{% endfor %}
+  </table>
+  {% else %}<p class="muted">No keyword gap data available.</p>{% endif %}
+  {% if keywords.quick_wins %}
+  <h3>Quick wins (already ranking, positions 5&ndash;20)</h3>
+  <table>
+    <tr><th>Keyword</th><th>Current rank</th><th>Volume</th></tr>
+    {% for w in keywords.quick_wins %}<tr><td>{{ w.keyword }}</td><td>#{{ w.position }}</td><td>{% if w.volume is not none %}{{ w.volume }}{% else %}&mdash;{% endif %}</td></tr>{% endfor %}
+  </table>
+  {% endif %}
+</section>
+
+<section class="page">
+  <h2>Recommended Topical Map</h2>
+  {% if topical_map.summary %}<p>{{ topical_map.summary }}</p>{% endif %}
+  {% for pillar in topical_map.pillars %}
+  <h3>{{ pillar.name }}</h3>
+  {% if pillar.description %}<p class="muted">{{ pillar.description }}</p>{% endif %}
+  {% for cluster in pillar.clusters %}
+  <p><strong>{{ cluster.name }}</strong></p>
+  <ul>{% for a in cluster.articles %}<li>{{ a.title }}{% if a.target_keyword %} <span class="muted">&mdash; target: {{ a.target_keyword }}{% if a.estimated_volume is not none %}, ~{{ a.estimated_volume }}/mo{% endif %}</span>{% endif %}</li>{% endfor %}</ul>
+  {% endfor %}
+  {% else %}<p class="muted">No topical map was generated.</p>{% endfor %}
+</section>
+
+{% if draft %}
+<section class="page">
+  <h2>Sample Blog Post</h2>
+  <div class="draft">
+    {% if draft.meta_description %}<div class="meta"><strong>Meta description:</strong> {{ draft.meta_description }}</div>{% endif %}
+    {{ draft.body_html | safe }}
+    {% if draft.internal_links %}
+    <h3>Suggested internal links</h3>
+    <ul class="links">{% for l in draft.internal_links %}<li>{{ l.anchor }} &rarr; {{ l.url }}</li>{% endfor %}</ul>
+    {% endif %}
+  </div>
+</section>
+{% endif %}
+
+<section class="page">
+  <h2>Recommended Next Steps</h2>
+  <ol>
+    <li>Close the highest-value keyword gaps with new, targeted content.</li>
+    <li>Prioritize the quick-win keywords already ranking on pages 1&ndash;2.</li>
+    <li>Build out the recommended topical map, starting with the highest-opportunity pillars.</li>
+    <li>Match the voice and quality of the sample blog post across the content program.</li>
+  </ol>
+  <p class="muted">Prepared by {{ branding.agency_name }}.</p>
+</section>
+
+</body>
+</html>

@@ -105,3 +105,20 @@ def test_build_report_context_handles_missing_sections():
     assert ctx["draft"] is None
     assert ctx["topical_map"]["pillars"] == []
     assert ctx["charts"]["content_volume_svg"] == ""   # nothing to chart
+
+
+from compresearch.render import render_report_html
+
+
+def test_render_report_html_contains_key_sections():
+    ctx = build_report_context(_full_jobdata(), Branding(), report_date="June 17, 2026")
+    html = render_report_html(ctx)
+    assert "Acme Co" in html                       # client name on the cover
+    assert "TAG Online" in html                    # agency branding
+    assert "Executive Summary" in html
+    assert "case-studies" in html                  # a content gap
+    assert "free crm" in html                      # a keyword gap
+    assert "What is a CRM?" in html                # topical map + draft title
+    assert "<strong>helps</strong>" in html        # rendered draft body
+    assert "<svg" in html                          # an embedded chart
+    assert "#16314F" in html or "#E2703A" in html  # branding colors applied
