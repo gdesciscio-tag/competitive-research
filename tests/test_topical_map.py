@@ -108,3 +108,37 @@ def test_run_topical_map_captures_generator_error(tmp_path):
     assert data.topical_map.map is None
     assert "api down" in data.topical_map.error
     assert data.topical_map.model == "fake-model"
+
+
+def test_generator_raises_when_parsed_output_is_none():
+    from compresearch.topical_map import ClaudeTopicalMapGenerator
+
+    class _Resp:
+        parsed_output = None
+        stop_reason = "refusal"
+
+    class _Messages:
+        def parse(self, **kwargs):
+            return _Resp()
+
+    class _Client:
+        messages = _Messages()
+
+    gen = ClaudeTopicalMapGenerator(client=_Client())
+    import pytest
+    with pytest.raises(RuntimeError):
+        gen("some prompt")
+
+
+def test_run_topical_map_with_no_prior_modules_warns_and_persists(tmp_path, caplog):
+    import logging
+    cfg = JobConfig(client_name="Acme Co", client_url="https://acme.com")
+    job_dir = create_job(cfg, jobs_dir=tmp_path)
+    fake_map = TopicalMap(pillars=[])
+    captured = []
+    with caplog.at_level(logging.WARNING):
+        run_topical_map(job_dir, generator=make_fake_generator(captured, result=fake_map))
+    data = load_data(job_dir)
+    assert data.topical_map is not None
+    assert data.topical_map.map is not None
+    assert "no sitemap or keyword gaps" in caplog.text

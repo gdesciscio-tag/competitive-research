@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
+from typing import Callable
 
 import anthropic
 
@@ -74,6 +75,8 @@ one-sentence rationale. Return the result in the required structured format."""
 
 DEFAULT_TOPICAL_MAP_MODEL = "claude-sonnet-4-6"
 
+Generator = Callable[[str], TopicalMap]
+
 
 class ClaudeTopicalMapGenerator:
     """Generates a TopicalMap via the Claude API. The network call is isolated here
@@ -97,7 +100,13 @@ class ClaudeTopicalMapGenerator:
             messages=[{"role": "user", "content": prompt}],
             output_format=TopicalMap,
         )
-        return response.parsed_output
+        topical_map = response.parsed_output
+        if topical_map is None:
+            raise RuntimeError(
+                f"Claude returned no structured output (stop_reason="
+                f"{getattr(response, 'stop_reason', None)!r})"
+            )
+        return topical_map
 
     @classmethod
     def from_settings(cls) -> "ClaudeTopicalMapGenerator":
@@ -106,7 +115,9 @@ class ClaudeTopicalMapGenerator:
         return cls()
 
 
-def _gather_topical_inputs(data: JobData):
+def _gather_topical_inputs(
+    data: JobData,
+) -> tuple[str, str | None, list[str], list[str], list[tuple[str, int | None]], list[tuple[str, int]]]:
     """Pull grounding inputs from the job's sitemap + keyword results."""
     config = data.config
     existing_sections: list[str] = []
@@ -130,7 +141,7 @@ def _gather_topical_inputs(data: JobData):
     )
 
 
-def run_topical_map(job_dir: Path, generator=None) -> JobData:
+def run_topical_map(job_dir: Path, generator: Generator | None = None) -> JobData:
     """Generate a topical map for a job and persist it to data.json."""
     data = load_data(job_dir)
     if generator is None:
