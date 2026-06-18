@@ -186,3 +186,13 @@ def test_render_result_and_jobdata_render():
     assert restored.error is None
     data = JobData(config=JobConfig(client_name="X", client_url="https://x.com"))
     assert data.render is None
+
+
+def test_sheet_result_and_jobdata_sheet():
+    from compresearch.models import SheetResult, JobConfig, JobData
+    r = SheetResult(sheet_url="https://docs.google.com/spreadsheets/d/abc")
+    restored = SheetResult.model_validate_json(r.model_dump_json())
+    assert restored.sheet_url.endswith("abc")
+    assert restored.error is None
+    data = JobData(config=JobConfig(client_name="X", client_url="https://x.com"))
+    assert data.sheet is None

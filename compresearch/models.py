@@ -151,6 +151,11 @@ class RenderResult(BaseModel):
     error: str | None = None
 
 
+class SheetResult(BaseModel):
+    sheet_url: str | None = None
+    error: str | None = None
+
+
 class JobConfig(BaseModel):
     client_name: str
     client_url: str
@@ -182,3 +187,4 @@ class JobData(BaseModel):
     topical_map: TopicalMapResult | None = None
     draft_post: DraftPostResult | None = None
     render: RenderResult | None = None
+    sheet: SheetResult | None = None

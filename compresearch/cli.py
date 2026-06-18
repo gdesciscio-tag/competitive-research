@@ -10,11 +10,12 @@ from compresearch.job_store import create_job
 from compresearch.keywords import run_keywords, Provider
 from compresearch.models import JobConfig
 from compresearch.render import run_render, render_pdf
+from compresearch.sheets import run_sheet
 from compresearch.sitemap import Fetcher, http_fetch, run_sitemap
 from compresearch.topical_map import run_topical_map, Generator
 
 
-def run_from_args(argv: list[str], fetch: Fetcher = http_fetch, provider=None, generator: Generator | None = None, draft_generator: DraftGenerator | None = None, html_to_pdf=render_pdf) -> Path:
+def run_from_args(argv: list[str], fetch: Fetcher = http_fetch, provider=None, generator: Generator | None = None, draft_generator: DraftGenerator | None = None, html_to_pdf=render_pdf, sheet_writer=None) -> Path:
     """Parse args, create the job, run the requested module. Returns the job dir."""
     parser = argparse.ArgumentParser(prog="compresearch")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -37,6 +38,9 @@ def run_from_args(argv: list[str], fetch: Fetcher = http_fetch, provider=None, g
 
     rn = sub.add_parser("render", help="Render the branded PDF report for an existing job")
     rn.add_argument("--job-dir", required=True)
+
+    sh = sub.add_parser("sheet", help="Create the Google Sheet appendix for an existing job")
+    sh.add_argument("--job-dir", required=True)
 
     args = parser.parse_args(argv)
 
@@ -82,6 +86,15 @@ def run_from_args(argv: list[str], fetch: Fetcher = http_fetch, provider=None, g
         job_dir = Path(args.job_dir)
         try:
             run_render(job_dir, html_to_pdf=html_to_pdf)
+        except (RuntimeError, ValueError, FileNotFoundError) as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            raise SystemExit(1)
+        return job_dir
+
+    if args.command == "sheet":
+        job_dir = Path(args.job_dir)
+        try:
+            run_sheet(job_dir, writer=sheet_writer)
         except (RuntimeError, ValueError, FileNotFoundError) as exc:
             print(f"Error: {exc}", file=sys.stderr)
             raise SystemExit(1)
