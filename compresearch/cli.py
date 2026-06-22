@@ -20,7 +20,7 @@ def _print_run_summary(data) -> None:
     report = data.run_report
     print("\nCompetitive research job complete:")
     for step in report.steps:
-        mark = "OK " if step.status == "ok" else "XX "
+        mark = {"ok": "OK ", "partial": "~~ "}.get(step.status, "XX ")
         line = f"  [{mark}] {step.name}"
         if step.error:
             line += f" — {step.error}"
