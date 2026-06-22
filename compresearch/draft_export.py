@@ -61,3 +61,59 @@ def build_draft_html(post: DraftPost, branding: Branding) -> str:
         f"{links_html}"
         "</body></html>"
     )
+
+
+DOC_MIME = "application/vnd.google-apps.document"
+
+DocWriter = Callable[[str, str], str]
+
+
+class GoogleDocWriter:
+    """Uploads draft HTML to Google Drive, converted to a Google Doc, inside a Shared
+    Drive folder, and shares it. The googleapiclient import is lazy so importing this
+    module (and the test suite) does not require it."""
+
+    def __init__(self, service, share_email: str, folder_id: str | None = None) -> None:
+        self.service = service
+        self.share_email = share_email
+        self.folder_id = folder_id
+
+    def __call__(self, title: str, html: str) -> str:
+        from googleapiclient.http import MediaInMemoryUpload
+
+        body = {"name": title, "mimeType": DOC_MIME}
+        if self.folder_id:
+            body["parents"] = [self.folder_id]
+        media = MediaInMemoryUpload(html.encode("utf-8"), mimetype="text/html", resumable=False)
+        created = self.service.files().create(
+            body=body,
+            media_body=media,
+            fields="id,webViewLink",
+            supportsAllDrives=True,
+        ).execute()
+        doc_id = created["id"]
+        self.service.permissions().create(
+            fileId=doc_id,
+            body={"type": "user", "role": "writer", "emailAddress": self.share_email},
+            supportsAllDrives=True,
+            sendNotificationEmail=False,
+        ).execute()
+        return created.get("webViewLink") or f"https://docs.google.com/document/d/{doc_id}/edit"
+
+    @classmethod
+    def from_settings(cls) -> "GoogleDocWriter":
+        sa_path = get_secret("GOOGLE_SERVICE_ACCOUNT_JSON")
+        share_email = get_secret("GOOGLE_SHARE_EMAIL")
+        folder_id = get_secret("GOOGLE_SHARED_DRIVE_ID")
+        if not sa_path:
+            raise RuntimeError("GOOGLE_SERVICE_ACCOUNT_JSON must be set to create a Google Doc")
+        if not share_email:
+            raise RuntimeError("GOOGLE_SHARE_EMAIL must be set to share the created Google Doc")
+        from google.oauth2.service_account import Credentials
+        from googleapiclient.discovery import build
+
+        creds = Credentials.from_service_account_file(
+            sa_path, scopes=["https://www.googleapis.com/auth/drive"]
+        )
+        service = build("drive", "v3", credentials=creds, cache_discovery=False)
+        return cls(service, share_email, folder_id or None)
