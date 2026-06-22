@@ -73,6 +73,40 @@ def test_categorize_counts_first_path_segment():
     assert counts == {"blog": 2, "services": 1, "(root)": 1}
 
 
+def test_categorize_folds_root_level_singletons_into_individual_pages():
+    # Sites that put blog posts at the root (e.g. acme.com/my-post) shouldn't make each
+    # post its own one-page "section" — those fold into "(individual pages)".
+    urls = [
+        UrlEntry(loc="https://acme.com/blog/post-1"),   # real section (has children)
+        UrlEntry(loc="https://acme.com/blog/post-2"),
+        UrlEntry(loc="https://acme.com/the-key-to-being-found"),  # root-level post
+        UrlEntry(loc="https://acme.com/another-post"),           # root-level post
+        UrlEntry(loc="https://acme.com/about"),                  # standalone page
+        UrlEntry(loc="https://acme.com/"),                       # homepage
+    ]
+    counts = categorize_urls(urls)
+    assert counts["blog"] == 2
+    assert counts["(individual pages)"] == 3   # the-key..., another-post, about
+    assert counts["(root)"] == 1
+    assert "the-key-to-being-found" not in counts
+    assert "about" not in counts
+
+
+def test_categorize_keeps_a_singleton_section_that_has_children():
+    # A first segment with a child path is a real section even if it appears once.
+    counts = categorize_urls([UrlEntry(loc="https://acme.com/services/seo")])
+    assert counts == {"services": 1}
+
+
+def test_categorize_folds_distinct_root_slugs_together():
+    # Two different root-level slugs are two individual pages, grouped into one bucket.
+    counts = categorize_urls([
+        UrlEntry(loc="https://acme.com/case-study-a"),
+        UrlEntry(loc="https://acme.com/case-study-b"),
+    ])
+    assert counts == {"(individual pages)": 2}
+
+
 from compresearch.sitemap import infer_cadence
 
 
@@ -103,7 +137,8 @@ def test_analyze_domain_happy_path(make_fetch, urlset):
     result = analyze_domain("https://acme.com", fetch)
     assert result.error is None
     assert result.total_urls == 3
-    assert result.section_counts == {"blog": 2, "about": 1}
+    # /about is a root-level standalone page -> folded into "(individual pages)"
+    assert result.section_counts == {"blog": 2, "(individual pages)": 1}
     assert result.posts_per_month is not None
 
 

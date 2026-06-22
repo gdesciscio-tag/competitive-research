@@ -122,3 +122,8 @@ your safety net.
 - DataForSEO returns a per-call `cost` field that isn't yet folded into the run report's total.
 - The single-step CLI subcommands print "Job complete" even if that step's `.error` is set
   (the `run-job` summary does surface per-step status correctly).
+- **Location-page naming patterns:** the categorizer cleanly handles nested location hubs
+  (`/service-areas/<city>` → one section) and root-level blog posts (→ `(individual pages)`),
+  but competitors who put location pages at the *root* with a shared name pattern
+  (`/digital-marketing-passaic-nj`) fold into `(individual pages)` and lose the local-SEO
+  signal. Detecting shared-prefix/suffix slug patterns would recover it.

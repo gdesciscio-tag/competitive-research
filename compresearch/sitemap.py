@@ -89,12 +89,39 @@ def fetch_sitemap_urls(
 
 
 def categorize_urls(urls: list[UrlEntry]) -> dict[str, int]:
-    """Count URLs by their first path segment ('(root)' for the homepage)."""
-    counts: dict[str, int] = {}
+    """Count URLs by content section.
+
+    A first path segment is a real *section* if it groups 2+ URLs or has any deeper path
+    under it (e.g. '/blog/post' -> 'blog', '/services/seo' -> 'services'). Root-level
+    standalone pages with no children (e.g. '/my-post', '/about') fold into a single
+    '(individual pages)' bucket, so sites that publish posts at the root don't turn every
+    post into its own one-page section. The homepage is counted as '(root)'.
+    """
+    root_count = 0
+    seg_count: dict[str, int] = {}
+    seg_has_child: dict[str, bool] = {}
     for entry in urls:
         path = urlparse(entry.loc).path.strip("/")
-        section = path.split("/")[0] if path else "(root)"
-        counts[section] = counts.get(section, 0) + 1
+        if not path:
+            root_count += 1
+            continue
+        parts = path.split("/")
+        segment = parts[0]
+        seg_count[segment] = seg_count.get(segment, 0) + 1
+        if len(parts) >= 2:
+            seg_has_child[segment] = True
+
+    counts: dict[str, int] = {}
+    if root_count:
+        counts["(root)"] = root_count
+    individual = 0
+    for segment, count in seg_count.items():
+        if count >= 2 or seg_has_child.get(segment, False):
+            counts[segment] = count
+        else:
+            individual += count
+    if individual:
+        counts["(individual pages)"] = individual
     return counts
 
 
