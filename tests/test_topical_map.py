@@ -155,3 +155,28 @@ def test_prompt_honors_empty_business_description():
         quick_wins=[],
     )
     assert "infer" not in prompt.lower()   # explicit empty string is honored, not inferred
+
+
+def test_generator_records_last_usage():
+    from compresearch.topical_map import ClaudeTopicalMapGenerator
+    from compresearch.models import TopicalMap
+
+    class _Usage:
+        input_tokens = 1200
+        output_tokens = 800
+
+    class _Resp:
+        parsed_output = TopicalMap(pillars=[])
+        usage = _Usage()
+
+    class _Messages:
+        def parse(self, **kwargs):
+            return _Resp()
+
+    class _Client:
+        messages = _Messages()
+
+    gen = ClaudeTopicalMapGenerator(client=_Client())
+    assert gen.last_usage is None          # nothing recorded before the first call
+    gen("prompt")
+    assert gen.last_usage == {"input_tokens": 1200, "output_tokens": 800}

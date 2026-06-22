@@ -151,6 +151,7 @@ class ClaudeDraftPostGenerator:
         self.client = client or anthropic.Anthropic()
         self.model = model
         self.max_tokens = max_tokens
+        self.last_usage: dict | None = None
 
     def __call__(self, prompt: str) -> DraftPost:
         response = self.client.messages.parse(
@@ -159,6 +160,15 @@ class ClaudeDraftPostGenerator:
             thinking={"type": "adaptive"},
             messages=[{"role": "user", "content": prompt}],
             output_format=DraftPost,
+        )
+        usage = getattr(response, "usage", None)
+        self.last_usage = (
+            {
+                "input_tokens": getattr(usage, "input_tokens", 0) or 0,
+                "output_tokens": getattr(usage, "output_tokens", 0) or 0,
+            }
+            if usage is not None
+            else None
         )
         post = response.parsed_output
         if post is None:

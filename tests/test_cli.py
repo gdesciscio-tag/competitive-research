@@ -183,3 +183,43 @@ def test_sheet_subcommand_missing_credentials_exits_cleanly(tmp_path, monkeypatc
     with pytest.raises(SystemExit) as exc:
         run_from_args(["sheet", "--job-dir", str(job_dir)])  # no writer -> from_settings
     assert exc.value.code == 1
+
+
+def test_run_job_subcommand_end_to_end(tmp_path):
+    from tests.test_orchestrator import (
+        _sitemap_fetch, _keyword_provider, _topical_generator, _draft_generator,
+    )
+
+    captured = {}
+
+    def html_to_pdf(html, output_path):
+        captured["html"] = html
+        from pathlib import Path as _P
+        _P(output_path).write_text("PDF", encoding="utf-8")
+
+    def sheet_writer(title, tabs):
+        return "https://docs.google.com/spreadsheets/d/FAKE"
+
+    returned = run_from_args(
+        [
+            "run-job",
+            "--client-name", "Acme Co",
+            "--client-url", "https://acme.com",
+            "--competitors", "https://rival.com",
+            "--business-description", "Acme sells CRM software",
+            "--jobs-dir", str(tmp_path),
+        ],
+        fetch=_sitemap_fetch(),
+        provider=_keyword_provider(),
+        generator=_topical_generator(),
+        draft_generator=_draft_generator(),
+        html_to_pdf=html_to_pdf,
+        sheet_writer=sheet_writer,
+    )
+    assert returned == tmp_path / "acme-co"
+    data = load_data(returned)
+    assert [s.name for s in data.run_report.steps] == [
+        "sitemap", "keywords", "topical_map", "draft_post", "render", "sheet",
+    ]
+    assert all(s.status == "ok" for s in data.run_report.steps)
+    assert data.sheet.sheet_url.endswith("FAKE")
