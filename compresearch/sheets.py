@@ -89,7 +89,7 @@ def build_sheet_model(data: JobData) -> list[SheetTab]:
                     ])
         tabs.append(SheetTab("Topical Map", rows))
 
-    # --- Draft post ---
+    # --- Draft post (metadata only; the prose lives in the exported Doc/HTML) ---
     if data.draft_post is not None and data.draft_post.post is not None:
         post = data.draft_post.post
         rows = [
@@ -97,14 +97,10 @@ def build_sheet_model(data: JobData) -> list[SheetTab]:
             ["Target keyword", _cell(post.target_keyword)],
             ["Title tag", _cell(post.title_tag)],
             ["Meta description", _cell(post.meta_description)],
-            [],
         ]
-        if post.internal_links:
-            rows += [["Internal links"], ["Anchor", "URL"]]
-            for link in post.internal_links:
-                rows.append([link.anchor, link.url])
-            rows.append([])
-        rows += [["Body (Markdown)"], [post.body_markdown]]
+        doc_url = data.draft_export.doc_url if data.draft_export is not None else None
+        if doc_url:
+            rows.append(["Document", f'=HYPERLINK("{doc_url}", "Open draft")'])
         tabs.append(SheetTab("Draft Post", rows))
 
     return tabs

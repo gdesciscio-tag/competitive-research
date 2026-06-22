@@ -73,6 +73,29 @@ def test_build_sheet_model_converts_none_to_blank():
     assert data_row[0] == "bare"
 
 
+def test_draft_post_tab_is_metadata_with_doc_link():
+    from compresearch.models import DraftExportResult
+    data = _full_jobdata()
+    data.config = JobConfig(client_name="Acme Co", client_url="https://acme.com")
+    data.draft_export = DraftExportResult(doc_url="https://docs.google.com/document/d/DOC/edit")
+
+    tabs = build_sheet_model(data)
+    draft = next(t for t in tabs if t.name == "Draft Post")
+    flat = _flatten(draft)
+    # metadata present
+    assert "What is a CRM?" in flat                 # the Title row
+    # the prose body is NOT dumped into the sheet anymore
+    assert not any("A CRM helps teams." in cell for cell in flat)
+    # a clickable Doc link is present
+    assert any("HYPERLINK" in cell and "DOC/edit" in cell for cell in flat)
+
+
+def test_draft_post_tab_omits_doc_link_when_no_export():
+    data = _full_jobdata()  # no draft_export
+    draft = next(t for t in build_sheet_model(data) if t.name == "Draft Post")
+    assert not any("HYPERLINK" in cell for cell in _flatten(draft))
+
+
 from compresearch.sheets import run_sheet, GoogleSheetWriter
 from compresearch.job_store import create_job, load_data, save_data
 import pytest
