@@ -149,7 +149,7 @@ def test_google_sheet_writer_sanitizes_empty_rows():
             pass
 
     class _Client:
-        def create(self, title):
+        def create(self, title, folder_id=None):
             return _SS()
 
     writer = GoogleSheetWriter(_Client(), "team@example.com")
