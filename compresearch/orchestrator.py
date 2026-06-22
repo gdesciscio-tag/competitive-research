@@ -3,8 +3,6 @@ from __future__ import annotations
 
 import logging
 import time
-from pathlib import Path
-
 from compresearch.costs import estimate_cost
 from compresearch.draft_post import ClaudeDraftPostGenerator, run_draft_post
 from compresearch.job_store import load_data, save_data
@@ -27,7 +25,7 @@ def _section_error(job_dir, attr: str) -> str | None:
 def _llm_cost(generator) -> float | None:
     usage = getattr(generator, "last_usage", None)
     model = getattr(generator, "model", None)
-    if not usage or not model:
+    if usage is None or not model:
         return None
     return estimate_cost(model, usage.get("input_tokens", 0), usage.get("output_tokens", 0))
 

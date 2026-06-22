@@ -146,3 +146,50 @@ def test_run_job_is_resilient_to_a_failed_step(tmp_path):
     assert statuses["sheet"] == "failed"     # the failing step is recorded, not raised
     sheet_step = next(s for s in data.run_report.steps if s.name == "sheet")
     assert "quota" in sheet_step.error
+
+
+def test_run_job_marks_step_failed_when_generator_errors_and_continues(tmp_path):
+    cfg = JobConfig(client_name="Acme Co", client_url="https://acme.com",
+                    competitor_urls=["https://rival.com"])
+    job_dir = create_job(cfg, jobs_dir=tmp_path)
+
+    class RaisingTopicalGen:
+        model = "claude-sonnet-4-6"
+        last_usage = None  # no usage captured on failure
+
+        def __call__(self, prompt):
+            raise RuntimeError("model unavailable")
+
+    from pathlib import Path
+
+    def html_to_pdf(html, output_path):
+        Path(output_path).write_text("PDF", encoding="utf-8")
+
+    def sheet_writer(title, tabs):
+        return "https://docs.google.com/spreadsheets/d/FAKE"
+
+    data = run_job(
+        job_dir,
+        fetch=_sitemap_fetch(),
+        keyword_provider=_keyword_provider(),
+        topical_generator=RaisingTopicalGen(),
+        draft_generator=_draft_generator(),
+        html_to_pdf=html_to_pdf,
+        sheet_writer=sheet_writer,
+    )
+    steps = {s.name: s for s in data.run_report.steps}
+    # run_topical_map captures the generator error into topical_map.error WITHOUT raising,
+    # so the orchestrator records the step as "failed" (not via an exception) and continues.
+    assert steps["topical_map"].status == "failed"
+    assert "model unavailable" in steps["topical_map"].error
+    assert steps["topical_map"].cost_usd is None        # last_usage=None -> no cost, no crash
+    # draft_post also fails (no topical-map article available to select a topic from),
+    # but the pipeline still continues to render and sheet.
+    assert steps["draft_post"].status == "failed"
+    assert steps["render"].status == "ok"
+    assert steps["sheet"].status == "ok"
+    # total cost still sums cleanly (topical_map has None cost, draft generator
+    # was never invoked so its stale last_usage drives the cost tally)
+    assert data.run_report.total_cost_usd == round(
+        sum(s.cost_usd or 0.0 for s in steps.values()), 4
+    )
