@@ -100,7 +100,9 @@ def build_sheet_model(data: JobData) -> list[SheetTab]:
         ]
         doc_url = data.draft_export.doc_url if data.draft_export is not None else None
         if doc_url:
-            rows.append(["Document", f'=HYPERLINK("{doc_url}", "Open draft")'])
+            # Escape any double-quote so a stray quote can't break out of the formula string.
+            safe_url = doc_url.replace('"', "%22")
+            rows.append(["Document", f'=HYPERLINK("{safe_url}", "Open draft")'])
         tabs.append(SheetTab("Draft Post", rows))
 
     return tabs

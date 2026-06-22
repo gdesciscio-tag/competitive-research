@@ -256,3 +256,41 @@ def test_run_job_marks_sitemap_partial_when_a_competitor_fetch_fails(tmp_path):
     assert steps["sitemap"].status == "partial"
     assert steps["sitemap"].error is not None       # the explanatory note
     assert steps["render"].status == "ok"           # pipeline completed regardless
+
+
+def test_run_job_marks_draft_export_partial_when_doc_upload_fails(tmp_path):
+    cfg = JobConfig(client_name="Acme Co", client_url="https://acme.com",
+                    competitor_urls=["https://rival.com"])
+    job_dir = create_job(cfg, jobs_dir=tmp_path)
+
+    from pathlib import Path
+
+    def html_to_pdf(html, output_path):
+        Path(output_path).write_text("PDF", encoding="utf-8")
+
+    def sheet_writer(title, tabs):
+        return "https://docs.google.com/spreadsheets/d/FAKE"
+
+    def boom_doc_writer(title, html):
+        raise RuntimeError("drive unavailable")
+
+    data = run_job(
+        job_dir,
+        fetch=_sitemap_fetch(),
+        keyword_provider=_keyword_provider(),
+        topical_generator=_topical_generator(),
+        draft_generator=_draft_generator(),
+        html_to_pdf=html_to_pdf,
+        sheet_writer=sheet_writer,
+        doc_writer=boom_doc_writer,
+    )
+    steps = {s.name: s for s in data.run_report.steps}
+    # HTML was written but the Doc upload failed -> partial (not failed), and the note
+    # carries the underlying error.
+    assert steps["draft_export"].status == "partial"
+    assert "drive unavailable" in steps["draft_export"].error
+    # the local HTML artifact is still recorded, and later steps still ran
+    assert data.draft_export.html_path is not None
+    assert data.draft_export.doc_url is None
+    assert steps["render"].status == "ok"
+    assert steps["sheet"].status == "ok"

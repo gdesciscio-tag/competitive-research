@@ -18,17 +18,20 @@ from compresearch.topical_map import ClaudeTopicalMapGenerator, run_topical_map
 def _section_status(job_dir, attr: str) -> tuple[str, str | None]:
     """Return (status, note) for a job section after its run_* ran.
 
-    'failed' if the section is missing or captured an error; 'partial' if the section
-    ran but flagged is_partial (some domains incomplete); otherwise 'ok'.
+    'partial' if the section flagged is_partial (it produced its primary output but an
+    optional part failed); 'failed' if the section is missing or captured an error with no
+    partial output; otherwise 'ok'. is_partial is checked before error because a section
+    like draft_export records both (HTML written, Doc upload failed) and that is a partial,
+    not a failure.
     """
     section = getattr(load_data(job_dir), attr, None)
     if section is None:
         return "failed", "no result produced"
+    if getattr(section, "is_partial", False):
+        return "partial", getattr(section, "error", None) or "some data could not be fully retrieved"
     error = getattr(section, "error", None)
     if error is not None:
         return "failed", error
-    if getattr(section, "is_partial", False):
-        return "partial", "some data could not be fully retrieved"
     return "ok", None
 
 
@@ -52,7 +55,8 @@ def run_job(
     doc_writer=None,
 ) -> JobData:
     """Run the full pipeline for one job: sitemap -> keywords -> topical map -> draft
-    -> PDF -> Sheet. Resilient: a failed step is recorded and the pipeline continues."""
+    -> draft export -> PDF -> Sheet. Resilient: a failed step is recorded and the
+    pipeline continues."""
     steps: list[StepResult] = []
 
     def record(name, status, error, started, cost=None):
@@ -108,7 +112,7 @@ def run_job(
     except Exception as exc:
         record("draft_export", "failed", str(exc), t)
 
-    # 5. Render PDF
+    # 6. Render PDF
     t = time.monotonic()
     try:
         run_render(job_dir, html_to_pdf=html_to_pdf)
@@ -117,7 +121,7 @@ def run_job(
     except Exception as exc:
         record("render", "failed", str(exc), t)
 
-    # 6. Google Sheet
+    # 7. Google Sheet
     t = time.monotonic()
     try:
         run_sheet(job_dir, writer=sheet_writer)
