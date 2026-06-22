@@ -158,7 +158,7 @@ class SheetResult(BaseModel):
 
 class StepResult(BaseModel):
     name: str
-    status: str  # "ok" | "failed" | "skipped"
+    status: str  # "ok" | "partial" | "failed"
     error: str | None = None
     duration_seconds: float | None = None
     cost_usd: float | None = None

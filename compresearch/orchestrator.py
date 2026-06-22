@@ -14,12 +14,21 @@ from compresearch.sitemap import http_fetch, run_sitemap
 from compresearch.topical_map import ClaudeTopicalMapGenerator, run_topical_map
 
 
-def _section_error(job_dir, attr: str) -> str | None:
-    """Return a section's captured error (None if the section ran cleanly)."""
+def _section_status(job_dir, attr: str) -> tuple[str, str | None]:
+    """Return (status, note) for a job section after its run_* ran.
+
+    'failed' if the section is missing or captured an error; 'partial' if the section
+    ran but flagged is_partial (some domains incomplete); otherwise 'ok'.
+    """
     section = getattr(load_data(job_dir), attr, None)
     if section is None:
-        return "no result produced"
-    return getattr(section, "error", None)
+        return "failed", "no result produced"
+    error = getattr(section, "error", None)
+    if error is not None:
+        return "failed", error
+    if getattr(section, "is_partial", False):
+        return "partial", "some data could not be fully retrieved"
+    return "ok", None
 
 
 def _llm_cost(generator) -> float | None:
@@ -54,8 +63,8 @@ def run_job(
     t = time.monotonic()
     try:
         run_sitemap(job_dir, fetch=fetch)
-        err = _section_error(job_dir, "sitemap")
-        record("sitemap", "ok" if err is None else "failed", err, t)
+        status, err = _section_status(job_dir, "sitemap")
+        record("sitemap", status, err, t)
     except Exception as exc:
         record("sitemap", "failed", str(exc), t)
 
@@ -63,8 +72,8 @@ def run_job(
     t = time.monotonic()
     try:
         run_keywords(job_dir, provider=keyword_provider)
-        err = _section_error(job_dir, "keywords")
-        record("keywords", "ok" if err is None else "failed", err, t)
+        status, err = _section_status(job_dir, "keywords")
+        record("keywords", status, err, t)
     except Exception as exc:
         record("keywords", "failed", str(exc), t)
 
@@ -73,8 +82,8 @@ def run_job(
     try:
         gen = topical_generator or ClaudeTopicalMapGenerator.from_settings()
         run_topical_map(job_dir, generator=gen)
-        err = _section_error(job_dir, "topical_map")
-        record("topical_map", "ok" if err is None else "failed", err, t, _llm_cost(gen))
+        status, err = _section_status(job_dir, "topical_map")
+        record("topical_map", status, err, t, _llm_cost(gen))
     except Exception as exc:
         record("topical_map", "failed", str(exc), t)
 
@@ -83,8 +92,8 @@ def run_job(
     try:
         gen = draft_generator or ClaudeDraftPostGenerator.from_settings()
         run_draft_post(job_dir, generator=gen, fetch=fetch)
-        err = _section_error(job_dir, "draft_post")
-        record("draft_post", "ok" if err is None else "failed", err, t, _llm_cost(gen))
+        status, err = _section_status(job_dir, "draft_post")
+        record("draft_post", status, err, t, _llm_cost(gen))
     except Exception as exc:
         record("draft_post", "failed", str(exc), t)
 
@@ -92,8 +101,8 @@ def run_job(
     t = time.monotonic()
     try:
         run_render(job_dir, html_to_pdf=html_to_pdf)
-        err = _section_error(job_dir, "render")
-        record("render", "ok" if err is None else "failed", err, t)
+        status, err = _section_status(job_dir, "render")
+        record("render", status, err, t)
     except Exception as exc:
         record("render", "failed", str(exc), t)
 
@@ -101,8 +110,8 @@ def run_job(
     t = time.monotonic()
     try:
         run_sheet(job_dir, writer=sheet_writer)
-        err = _section_error(job_dir, "sheet")
-        record("sheet", "ok" if err is None else "failed", err, t)
+        status, err = _section_status(job_dir, "sheet")
+        record("sheet", status, err, t)
     except Exception as exc:
         record("sheet", "failed", str(exc), t)
 

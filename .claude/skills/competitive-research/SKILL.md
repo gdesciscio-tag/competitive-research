@@ -26,7 +26,7 @@ Confirm `.env` has the needed keys before running:
 ## Run the job
 
 ```
-python -m compresearch.cli run-job \
+.venv\Scripts\python -m compresearch.cli run-job \
   --client-name "<name>" \
   --client-url "<url>" \
   --competitors "<comma-separated urls>" \

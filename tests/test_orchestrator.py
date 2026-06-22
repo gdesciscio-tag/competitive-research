@@ -193,3 +193,47 @@ def test_run_job_marks_step_failed_when_generator_errors_and_continues(tmp_path)
     assert data.run_report.total_cost_usd == round(
         sum(s.cost_usd or 0.0 for s in steps.values()), 4
     )
+
+
+def test_run_job_marks_sitemap_partial_when_a_competitor_fetch_fails(tmp_path):
+    cfg = JobConfig(client_name="Acme Co", client_url="https://acme.com",
+                    competitor_urls=["https://rival.com"])
+    job_dir = create_job(cfg, jobs_dir=tmp_path)
+
+    # fetch knows the client but NOT the competitor -> the rival crawl fails ->
+    # SitemapResult.is_partial is True (client still succeeds).
+    acme_urlset = (
+        b'<?xml version="1.0"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'
+        b"<url><loc>https://acme.com/blog/a</loc></url></urlset>"
+    )
+    pages = {
+        "https://acme.com/robots.txt": b"Sitemap: https://acme.com/sitemap.xml\n",
+        "https://acme.com/sitemap.xml": acme_urlset,
+    }
+
+    def fetch(url):
+        if url not in pages:
+            raise FileNotFoundError(url)
+        return pages[url]
+
+    from pathlib import Path
+
+    def html_to_pdf(html, output_path):
+        Path(output_path).write_text("PDF", encoding="utf-8")
+
+    def sheet_writer(title, tabs):
+        return "https://docs.google.com/spreadsheets/d/FAKE"
+
+    data = run_job(
+        job_dir,
+        fetch=fetch,
+        keyword_provider=_keyword_provider(),
+        topical_generator=_topical_generator(),
+        draft_generator=_draft_generator(),
+        html_to_pdf=html_to_pdf,
+        sheet_writer=sheet_writer,
+    )
+    steps = {s.name: s for s in data.run_report.steps}
+    assert steps["sitemap"].status == "partial"
+    assert steps["sitemap"].error is not None       # the explanatory note
+    assert steps["render"].status == "ok"           # pipeline completed regardless
