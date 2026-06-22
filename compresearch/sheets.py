@@ -117,12 +117,15 @@ class GoogleSheetWriter:
     """Writes the sheet model to a new Google Sheet via gspread and shares it. gspread is
     imported lazily so importing this module (and the test suite) does not require it."""
 
-    def __init__(self, client, share_email: str) -> None:
+    def __init__(self, client, share_email: str, folder_id: str | None = None) -> None:
         self.client = client
         self.share_email = share_email
+        self.folder_id = folder_id
 
     def __call__(self, title: str, tabs: list[SheetTab]) -> str:
-        spreadsheet = self.client.create(title)
+        # When a Shared Drive (or folder) id is configured, create the Sheet inside it so
+        # the file is owned by the drive rather than the quota-less service account.
+        spreadsheet = self.client.create(title, folder_id=self.folder_id)
         for index, tab in enumerate(tabs):
             cols = max((len(row) for row in tab.rows), default=1)
             if index == 0:
@@ -144,13 +147,14 @@ class GoogleSheetWriter:
     def from_settings(cls) -> "GoogleSheetWriter":
         sa_path = get_secret("GOOGLE_SERVICE_ACCOUNT_JSON")
         share_email = get_secret("GOOGLE_SHARE_EMAIL")
+        folder_id = get_secret("GOOGLE_SHARED_DRIVE_ID")
         if not sa_path:
             raise RuntimeError("GOOGLE_SERVICE_ACCOUNT_JSON must be set to create a Google Sheet")
         if not share_email:
             raise RuntimeError("GOOGLE_SHARE_EMAIL must be set to share the created Google Sheet")
         import gspread
 
-        return cls(gspread.service_account(filename=sa_path), share_email)
+        return cls(gspread.service_account(filename=sa_path), share_email, folder_id or None)
 
 
 def run_sheet(job_dir, writer: SheetWriter | None = None) -> JobData:
