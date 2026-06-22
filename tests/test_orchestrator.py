@@ -81,6 +81,10 @@ def _full_run(job_dir):
         captured["sheet_title"] = title
         return "https://docs.google.com/spreadsheets/d/FAKE"
 
+    def doc_writer(title, html):
+        captured["doc_title"] = title
+        return "https://docs.google.com/document/d/DOCFAKE/edit"
+
     data = run_job(
         job_dir,
         fetch=_sitemap_fetch(),
@@ -89,6 +93,7 @@ def _full_run(job_dir):
         draft_generator=_draft_generator(),
         html_to_pdf=html_to_pdf,
         sheet_writer=sheet_writer,
+        doc_writer=doc_writer,
     )
     return data, captured
 
@@ -102,12 +107,14 @@ def test_run_job_runs_all_six_steps_offline(tmp_path):
 
     report = data.run_report
     assert [s.name for s in report.steps] == [
-        "sitemap", "keywords", "topical_map", "draft_post", "render", "sheet",
+        "sitemap", "keywords", "topical_map", "draft_post", "draft_export", "render", "sheet",
     ]
     assert all(s.status == "ok" for s in report.steps), [(s.name, s.status, s.error) for s in report.steps]
     # deliverables produced
     assert data.render.pdf_path.endswith(".pdf")
     assert data.sheet.sheet_url.endswith("FAKE")
+    assert data.draft_export.html_path.endswith("acme-co-draft.html")
+    assert data.draft_export.doc_url.endswith("DOCFAKE/edit")
     # the report HTML and sheet flowed through with real data
     assert "Acme Co" in captured["html"]
     # LLM cost captured: sonnet (1M+1M -> wait, 1000+1000) opus (500+2000)
@@ -132,6 +139,9 @@ def test_run_job_is_resilient_to_a_failed_step(tmp_path):
     def html_to_pdf(html, output_path):
         Path(output_path).write_text("PDF", encoding="utf-8")
 
+    def doc_writer(title, html):
+        return "https://docs.google.com/document/d/DOCFAKE/edit"
+
     data = run_job(
         job_dir,
         fetch=_sitemap_fetch(),
@@ -140,6 +150,7 @@ def test_run_job_is_resilient_to_a_failed_step(tmp_path):
         draft_generator=_draft_generator(),
         html_to_pdf=html_to_pdf,
         sheet_writer=boom_sheet_writer,
+        doc_writer=doc_writer,
     )
     statuses = {s.name: s.status for s in data.run_report.steps}
     assert statuses["render"] == "ok"        # earlier steps still succeeded
@@ -168,6 +179,9 @@ def test_run_job_marks_step_failed_when_generator_errors_and_continues(tmp_path)
     def sheet_writer(title, tabs):
         return "https://docs.google.com/spreadsheets/d/FAKE"
 
+    def doc_writer(title, html):
+        return "https://docs.google.com/document/d/DOCFAKE/edit"
+
     data = run_job(
         job_dir,
         fetch=_sitemap_fetch(),
@@ -176,6 +190,7 @@ def test_run_job_marks_step_failed_when_generator_errors_and_continues(tmp_path)
         draft_generator=_draft_generator(),
         html_to_pdf=html_to_pdf,
         sheet_writer=sheet_writer,
+        doc_writer=doc_writer,
     )
     steps = {s.name: s for s in data.run_report.steps}
     # run_topical_map captures the generator error into topical_map.error WITHOUT raising,
@@ -224,6 +239,9 @@ def test_run_job_marks_sitemap_partial_when_a_competitor_fetch_fails(tmp_path):
     def sheet_writer(title, tabs):
         return "https://docs.google.com/spreadsheets/d/FAKE"
 
+    def doc_writer(title, html):
+        return "https://docs.google.com/document/d/DOCFAKE/edit"
+
     data = run_job(
         job_dir,
         fetch=fetch,
@@ -232,6 +250,7 @@ def test_run_job_marks_sitemap_partial_when_a_competitor_fetch_fails(tmp_path):
         draft_generator=_draft_generator(),
         html_to_pdf=html_to_pdf,
         sheet_writer=sheet_writer,
+        doc_writer=doc_writer,
     )
     steps = {s.name: s for s in data.run_report.steps}
     assert steps["sitemap"].status == "partial"

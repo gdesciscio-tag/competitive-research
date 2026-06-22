@@ -4,6 +4,7 @@ from __future__ import annotations
 import logging
 import time
 from compresearch.costs import estimate_cost
+from compresearch.draft_export import run_draft_export
 from compresearch.draft_post import ClaudeDraftPostGenerator, run_draft_post
 from compresearch.job_store import load_data, save_data
 from compresearch.keywords import run_keywords
@@ -48,6 +49,7 @@ def run_job(
     draft_generator=None,
     html_to_pdf=render_pdf,
     sheet_writer=None,
+    doc_writer=None,
 ) -> JobData:
     """Run the full pipeline for one job: sitemap -> keywords -> topical map -> draft
     -> PDF -> Sheet. Resilient: a failed step is recorded and the pipeline continues."""
@@ -96,6 +98,15 @@ def run_job(
         record("draft_post", status, err, t, _llm_cost(gen))
     except Exception as exc:
         record("draft_post", "failed", str(exc), t)
+
+    # 5. Draft export (HTML + Google Doc)
+    t = time.monotonic()
+    try:
+        run_draft_export(job_dir, doc_writer=doc_writer)
+        status, err = _section_status(job_dir, "draft_export")
+        record("draft_export", status, err, t)
+    except Exception as exc:
+        record("draft_export", "failed", str(exc), t)
 
     # 5. Render PDF
     t = time.monotonic()
