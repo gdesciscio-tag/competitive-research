@@ -117,3 +117,58 @@ class GoogleDocWriter:
         )
         service = build("drive", "v3", credentials=creds, cache_discovery=False)
         return cls(service, share_email, folder_id or None)
+
+
+def run_draft_export(job_dir: Path, doc_writer: DocWriter | None = None, branding: Branding | None = None) -> JobData:
+    """Render the draft to a local HTML file and a Google Doc; record both in data.json.
+
+    The local HTML is always written first; a Drive/Doc failure leaves the HTML in place
+    and marks the result partial. Never raises — failures are captured like the other steps.
+    """
+    data = load_data(job_dir)
+    if data.draft_post is None or data.draft_post.post is None:
+        logging.warning(
+            "No draft post to export for %s; run the draft-post module first",
+            data.config.client_url,
+        )
+        data.draft_export = DraftExportResult(error="No draft post available to export")
+        save_data(job_dir, data)
+        return data
+
+    branding = branding or load_branding()
+    post = data.draft_post.post
+    slug = slugify(data.config.client_name)
+    output_path = Path(job_dir) / "outputs" / f"{slug}-draft.html"
+
+    try:
+        html = build_draft_html(post, branding)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_text(html, encoding="utf-8")
+    except Exception as exc:
+        logging.warning("Draft HTML render failed for %s: %s", data.config.client_url, exc)
+        data.draft_export = DraftExportResult(error=str(exc))
+        save_data(job_dir, data)
+        return data
+
+    result = DraftExportResult(html_path=str(output_path))
+    if doc_writer is None:
+        try:
+            doc_writer = GoogleDocWriter.from_settings()
+        except Exception as exc:
+            logging.warning("Google Doc writer unavailable for %s: %s", data.config.client_url, exc)
+            result.is_partial = True
+            result.error = str(exc)
+            data.draft_export = result
+            save_data(job_dir, data)
+            return data
+
+    title = f"{data.config.client_name} — Draft Post"
+    try:
+        result.doc_url = doc_writer(title, html)
+    except Exception as exc:
+        logging.warning("Google Doc creation failed for %s: %s", data.config.client_url, exc)
+        result.is_partial = True
+        result.error = str(exc)
+    data.draft_export = result
+    save_data(job_dir, data)
+    return data

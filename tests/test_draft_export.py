@@ -116,3 +116,69 @@ def test_google_doc_writer_from_settings_requires_credentials(monkeypatch):
     monkeypatch.setenv("GOOGLE_SERVICE_ACCOUNT_JSON", "sa.json")
     with pytest.raises(RuntimeError):   # share email still missing
         GoogleDocWriter.from_settings()
+
+
+from compresearch.job_store import create_job, load_data, save_data
+from compresearch.models import JobConfig, JobData, DraftPostResult
+
+
+def _job_with_draft(tmp_path):
+    cfg = JobConfig(client_name="Acme Co", client_url="https://acme.com")
+    job_dir = create_job(cfg, jobs_dir=tmp_path)
+    data = JobData(config=cfg, draft_post=DraftPostResult(post=_post()))
+    save_data(job_dir, data)
+    return job_dir
+
+
+def test_run_draft_export_writes_html_and_records_doc_url(tmp_path):
+    from compresearch.draft_export import run_draft_export
+
+    job_dir = _job_with_draft(tmp_path)
+    captured = {}
+
+    def fake_doc_writer(title, html):
+        captured["title"] = title
+        captured["html"] = html
+        return "https://docs.google.com/document/d/DOC/edit"
+
+    run_draft_export(job_dir, doc_writer=fake_doc_writer)
+
+    data = load_data(job_dir)
+    assert data.draft_export.error is None
+    assert data.draft_export.is_partial is False
+    assert data.draft_export.doc_url.endswith("/edit")
+    assert data.draft_export.html_path.endswith("acme-co-draft.html")
+    assert (job_dir / "outputs" / "acme-co-draft.html").read_text(encoding="utf-8").startswith("<!DOCTYPE html>")
+    assert captured["title"] == "Acme Co — Draft Post"
+
+
+def test_run_draft_export_partial_when_doc_writer_fails(tmp_path):
+    from compresearch.draft_export import run_draft_export
+
+    job_dir = _job_with_draft(tmp_path)
+
+    def boom(title, html):
+        raise RuntimeError("drive unavailable")
+
+    run_draft_export(job_dir, doc_writer=boom)
+
+    data = load_data(job_dir)
+    assert data.draft_export.html_path is not None     # HTML still written
+    assert (job_dir / "outputs" / "acme-co-draft.html").exists()
+    assert data.draft_export.doc_url is None
+    assert data.draft_export.is_partial is True
+    assert "drive unavailable" in data.draft_export.error
+
+
+def test_run_draft_export_graceful_when_no_draft(tmp_path):
+    from compresearch.draft_export import run_draft_export
+
+    cfg = JobConfig(client_name="Acme Co", client_url="https://acme.com")
+    job_dir = create_job(cfg, jobs_dir=tmp_path)  # no draft_post
+
+    run_draft_export(job_dir, doc_writer=lambda t, h: "unused")
+
+    data = load_data(job_dir)
+    assert data.draft_export.html_path is None
+    assert data.draft_export.doc_url is None
+    assert "No draft post" in data.draft_export.error
