@@ -5,6 +5,7 @@ import argparse
 import sys
 from pathlib import Path
 
+from compresearch.draft_export import run_draft_export
 from compresearch.draft_post import run_draft_post, DraftGenerator
 from compresearch.job_store import create_job
 from compresearch.keywords import run_keywords, Provider
@@ -29,10 +30,15 @@ def _print_run_summary(data) -> None:
         print(f"  PDF:   {data.render.pdf_path}")
     if data.sheet is not None and data.sheet.sheet_url:
         print(f"  Sheet: {data.sheet.sheet_url}")
+    if data.draft_export is not None:
+        if data.draft_export.html_path:
+            print(f"  Draft HTML: {data.draft_export.html_path}")
+        if data.draft_export.doc_url:
+            print(f"  Draft Doc:  {data.draft_export.doc_url}")
     print(f"  Estimated LLM cost: ${report.total_cost_usd:.4f}\n")
 
 
-def run_from_args(argv: list[str], fetch: Fetcher = http_fetch, provider=None, generator: Generator | None = None, draft_generator: DraftGenerator | None = None, html_to_pdf=render_pdf, sheet_writer=None) -> Path:
+def run_from_args(argv: list[str], fetch: Fetcher = http_fetch, provider=None, generator: Generator | None = None, draft_generator: DraftGenerator | None = None, html_to_pdf=render_pdf, sheet_writer=None, doc_writer=None) -> Path:
     """Parse args, create the job, run the requested module. Returns the job dir."""
     parser = argparse.ArgumentParser(prog="compresearch")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -58,6 +64,9 @@ def run_from_args(argv: list[str], fetch: Fetcher = http_fetch, provider=None, g
 
     sh = sub.add_parser("sheet", help="Create the Google Sheet appendix for an existing job")
     sh.add_argument("--job-dir", required=True)
+
+    de = sub.add_parser("draft-export", help="Export the draft post to HTML + a Google Doc")
+    de.add_argument("--job-dir", required=True)
 
     rj = sub.add_parser("run-job", help="Run the full competitive-research pipeline for a client")
     rj.add_argument("--client-name", required=True)
@@ -125,6 +134,11 @@ def run_from_args(argv: list[str], fetch: Fetcher = http_fetch, provider=None, g
             raise SystemExit(1)
         return job_dir
 
+    if args.command == "draft-export":
+        job_dir = Path(args.job_dir)
+        run_draft_export(job_dir, doc_writer=doc_writer)
+        return job_dir
+
     if args.command == "run-job":
         competitors = [c.strip() for c in args.competitors.split(",") if c.strip()]
         config = JobConfig(
@@ -143,6 +157,7 @@ def run_from_args(argv: list[str], fetch: Fetcher = http_fetch, provider=None, g
             draft_generator=draft_generator,
             html_to_pdf=html_to_pdf,
             sheet_writer=sheet_writer,
+            doc_writer=doc_writer,
         )
         _print_run_summary(data)
         return job_dir

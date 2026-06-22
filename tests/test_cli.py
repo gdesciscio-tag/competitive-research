@@ -200,6 +200,9 @@ def test_run_job_subcommand_end_to_end(tmp_path):
     def sheet_writer(title, tabs):
         return "https://docs.google.com/spreadsheets/d/FAKE"
 
+    def doc_writer(title, html):
+        return "https://docs.google.com/document/d/DOCFAKE/edit"
+
     returned = run_from_args(
         [
             "run-job",
@@ -215,11 +218,34 @@ def test_run_job_subcommand_end_to_end(tmp_path):
         draft_generator=_draft_generator(),
         html_to_pdf=html_to_pdf,
         sheet_writer=sheet_writer,
+        doc_writer=doc_writer,
     )
     assert returned == tmp_path / "acme-co"
     data = load_data(returned)
     assert [s.name for s in data.run_report.steps] == [
-        "sitemap", "keywords", "topical_map", "draft_post", "render", "sheet",
+        "sitemap", "keywords", "topical_map", "draft_post", "draft_export", "render", "sheet",
     ]
     assert all(s.status == "ok" for s in data.run_report.steps)
     assert data.sheet.sheet_url.endswith("FAKE")
+
+
+def test_run_from_args_draft_export_writes_html_and_records_doc(tmp_path):
+    from compresearch.cli import run_from_args
+    from compresearch.job_store import create_job, load_data, save_data
+    from compresearch.models import JobConfig, JobData, DraftPostResult, DraftPost
+
+    cfg = JobConfig(client_name="Acme Co", client_url="https://acme.com")
+    job_dir = create_job(cfg, jobs_dir=tmp_path)
+    data = JobData(config=cfg, draft_post=DraftPostResult(post=DraftPost(
+        title="What is a CRM?", body_markdown="# What is a CRM?\n\nBody.")))
+    save_data(job_dir, data)
+
+    def doc_writer(title, html):
+        return "https://docs.google.com/document/d/DOC/edit"
+
+    returned = run_from_args(["draft-export", "--job-dir", str(job_dir)], doc_writer=doc_writer)
+
+    assert returned == job_dir
+    reloaded = load_data(job_dir)
+    assert reloaded.draft_export.doc_url.endswith("/edit")
+    assert reloaded.draft_export.html_path.endswith("acme-co-draft.html")
