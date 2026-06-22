@@ -12,6 +12,23 @@ py -m venv .venv
 
 Copy `.env.example` to `.env` and fill in API keys as modules are added.
 
+## Run a full job (one command)
+
+Run the entire pipeline — sitemap, keywords, topical map, draft post, branded PDF, and Google
+Sheet — for one client:
+
+```
+.venv\Scripts\python -m compresearch.cli run-job \
+  --client-name "Acme Co" \
+  --client-url "https://acme.com" \
+  --competitors "https://rival-a.com,https://rival-b.com" \
+  --business-description "Acme sells CRM software"
+```
+
+It prints a per-step pass/fail summary, the PDF path, the Google Sheet URL, and the estimated
+Claude cost for the job. The pipeline is resilient: a failed step is recorded and the rest still
+run. Inside Claude Code, the `competitive-research` skill walks an operator through the same flow.
+
 ## Run the sitemap module
 
 ```
@@ -142,4 +159,4 @@ The shareable URL is recorded in `data.json` under `sheet`.
 - [x] Topical map module
 - [x] Draft post module
 - [x] Render module (branded PDF + Google Sheet)
-- [ ] Orchestrator + Claude Code skill
+- [x] Orchestrator + Claude Code skill
