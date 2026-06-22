@@ -41,7 +41,7 @@
 <body>
 
 <section class="page cover">
-  {% if branding.logo_path %}<img class="logo-img" src="file:///{{ branding.logo_path }}" alt="{{ branding.agency_name }}" style="max-height:64px;">{% else %}<div class="logo">{{ branding.agency_name }}</div>{% endif %}
+  {% if logo_html %}{{ logo_html | safe }}{% else %}<div class="logo">{{ branding.agency_name }}</div>{% endif %}
   <h1>Competitive Research &amp; Analysis</h1>
   <div class="sub">Prepared for <strong>{{ client_name }}</strong> &middot; {{ client_url }}</div>
   {% if report_date %}<div class="sub">{{ report_date }}</div>{% endif %}

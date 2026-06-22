@@ -47,6 +47,30 @@ def test_bar_chart_svg_escapes_labels():
     assert "a&b.com" not in svg
 
 
+def test_bar_chart_svg_angles_labels_to_avoid_overlap():
+    svg = _bar_chart_svg(["adedgemarketing.com", "socialjackmedia.com"], [2559, 1475])
+    assert 'transform="rotate(' in svg          # labels are angled, not overlapping
+    assert "adedgemarketing.com" in svg
+
+
+def test_logo_html_inlines_as_base64_data_uri(tmp_path):
+    from compresearch.render import _logo_html
+    from compresearch.models import Branding
+    logo = tmp_path / "logo.svg"
+    logo.write_text("<svg xmlns='http://www.w3.org/2000/svg'><rect/></svg>", encoding="utf-8")
+    html = _logo_html(Branding(logo_path=str(logo)))
+    assert html.startswith("<img")
+    assert "data:image/svg+xml;base64," in html
+    assert "file://" not in html                # no blocked external reference
+
+
+def test_logo_html_none_when_unset_or_missing(tmp_path):
+    from compresearch.render import _logo_html
+    from compresearch.models import Branding
+    assert _logo_html(Branding()) is None
+    assert _logo_html(Branding(logo_path=str(tmp_path / "does-not-exist.svg"))) is None
+
+
 from compresearch.render import build_report_context
 from compresearch.models import (
     JobConfig, JobData, Branding,
@@ -124,6 +148,16 @@ def test_render_report_html_contains_key_sections():
     assert "<strong>helps</strong>" in html        # rendered draft body
     assert "<svg" in html                          # an embedded chart
     assert "#16314F" in html or "#E2703A" in html  # branding colors applied
+
+
+def test_render_report_html_embeds_logo_inline(tmp_path):
+    logo = tmp_path / "logo.svg"
+    logo.write_text("<svg xmlns='http://www.w3.org/2000/svg'></svg>", encoding="utf-8")
+    ctx = build_report_context(_full_jobdata(), Branding(logo_path=str(logo)))
+    assert "data:image/svg+xml;base64," in ctx["logo_html"]
+    html = render_report_html(ctx)
+    assert "data:image/svg+xml;base64," in html    # logo reaches the cover, no file:// ref
+    assert "file:///" not in html
 
 
 from compresearch.render import run_render

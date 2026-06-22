@@ -1,7 +1,9 @@
 # compresearch/render.py
 from __future__ import annotations
 
+import base64
 import logging
+import mimetypes
 from pathlib import Path
 from xml.sax.saxutils import escape
 
@@ -19,43 +21,72 @@ TEMPLATES_DIR = Path(__file__).parent / "templates"
 def _bar_chart_svg(
     labels: list[str],
     values: list[int],
-    width: int = 560,
-    height: int = 240,
-    bar_color: str = "#E2703A",
+    width: int = 600,
+    height: int = 300,
+    bar_color: str = "#6C757D",
     text_color: str = "#1F2933",
 ) -> str:
-    """Render a simple vertical bar chart as a standalone, deterministic SVG string."""
+    """Render a simple vertical bar chart as a standalone, deterministic SVG string.
+
+    Labels are angled (-30 degrees) below the bars so long domain names don't overlap.
+    """
     if not values:
         return ""
     max_val = max(values) or 1
     count = len(values)
-    pad = 40
-    chart_h = height - 2 * pad
-    chart_w = width - 2 * pad
-    gap = 16
+    pad_x, pad_top, pad_bottom = 44, 28, 96
+    chart_h = height - pad_top - pad_bottom
+    chart_w = width - 2 * pad_x
+    gap = 18
     bar_w = (chart_w - gap * (count - 1)) / count if count else 0
+    baseline = pad_top + chart_h
     # bar_color/text_color come from the trusted branding config (not user/LLM input),
     # so they are interpolated into SVG attributes without escaping; labels ARE escaped.
     parts: list[str] = []
     for index, (label, value) in enumerate(zip(labels, values)):
         bar_h = (value / max_val) * chart_h
-        x = pad + index * (bar_w + gap)
-        y = pad + (chart_h - bar_h)
+        x = pad_x + index * (bar_w + gap)
+        cx = x + bar_w / 2
+        y = pad_top + (chart_h - bar_h)
         parts.append(
             f'<rect x="{x:.1f}" y="{y:.1f}" width="{bar_w:.1f}" height="{bar_h:.1f}" '
             f'fill="{bar_color}" rx="3"/>'
         )
         parts.append(
-            f'<text x="{x + bar_w / 2:.1f}" y="{y - 6:.1f}" text-anchor="middle" '
+            f'<text x="{cx:.1f}" y="{y - 6:.1f}" text-anchor="middle" '
             f'font-size="12" fill="{text_color}">{value}</text>'
         )
+        label_y = baseline + 14
         parts.append(
-            f'<text x="{x + bar_w / 2:.1f}" y="{height - pad + 16:.1f}" text-anchor="middle" '
-            f'font-size="11" fill="{text_color}">{escape(label)}</text>'
+            f'<text x="{cx:.1f}" y="{label_y:.1f}" text-anchor="end" font-size="11" '
+            f'fill="{text_color}" transform="rotate(-30 {cx:.1f} {label_y:.1f})">'
+            f'{escape(label)}</text>'
         )
     return (
         f'<svg viewBox="0 0 {width} {height}" xmlns="http://www.w3.org/2000/svg" '
         f'width="100%" role="img">{"".join(parts)}</svg>'
+    )
+
+
+def _logo_html(branding: Branding) -> str | None:
+    """Inline the configured logo as a base64 data URI.
+
+    The PDF renderer sets the page HTML directly, which makes the browser block
+    `file://` subresource loads — so an external logo silently fails to appear. Embedding
+    the bytes inline avoids that entirely. Returns None when no logo file is configured.
+    """
+    if not branding.logo_path:
+        return None
+    path = Path(branding.logo_path)
+    if not path.exists():
+        return None
+    mime, _ = mimetypes.guess_type(path.name)
+    if mime is None:
+        mime = "image/svg+xml" if path.suffix.lower() == ".svg" else "application/octet-stream"
+    encoded = base64.b64encode(path.read_bytes()).decode("ascii")
+    return (
+        f'<img class="logo-img" src="data:{mime};base64,{encoded}" '
+        f'alt="{escape(branding.agency_name)}" style="max-height:64px;">'
     )
 
 
@@ -149,6 +180,7 @@ def build_report_context(data: JobData, branding: Branding, report_date: str | N
 
     return {
         "branding": branding,
+        "logo_html": _logo_html(branding),
         "client_name": config.client_name,
         "client_url": config.client_url,
         "report_date": report_date or "",
