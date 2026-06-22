@@ -32,12 +32,16 @@ def build_draft_html(post: DraftPost, branding: Branding) -> str:
             )
     meta_table = f"<table>{''.join(meta_rows)}</table>" if meta_rows else ""
 
+    def _link_item(link) -> str:
+        # The url field is LLM-sourced; only emit a real href for http(s) schemes so a
+        # javascript:/data: URL cannot become a live link in the browser-viewable output.
+        if link.url.lower().startswith(("http://", "https://")):
+            return f"<li><a href=\"{escape(link.url)}\">{escape(link.anchor)}</a></li>"
+        return f"<li>{escape(link.anchor)}</li>"
+
     links_html = ""
     if post.internal_links:
-        items = "".join(
-            f"<li><a href=\"{escape(link.url)}\">{escape(link.anchor)}</a></li>"
-            for link in post.internal_links
-        )
+        items = "".join(_link_item(link) for link in post.internal_links)
         links_html = f"<h2>Internal links</h2><ul>{items}</ul>"
 
     body_html = markdown_to_html(post.body_markdown)

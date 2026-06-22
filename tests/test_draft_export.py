@@ -32,3 +32,18 @@ def test_build_draft_html_escapes_metadata():
     post.title = "A < B & C"
     html = build_draft_html(post, Branding())
     assert "A &lt; B &amp; C" in html            # title escaped in the <h1>
+    assert "<title>A &lt; B &amp; C</title>" in html  # title escaped at the <title> site too
+
+
+def test_build_draft_html_drops_unsafe_link_scheme():
+    from compresearch.draft_export import build_draft_html
+    from compresearch.models import Branding, DraftPost, InternalLink
+
+    post = DraftPost(
+        title="T", body_markdown="body",
+        internal_links=[InternalLink(anchor="click me", url="javascript:alert(1)")],
+    )
+    html = build_draft_html(post, Branding())
+    assert "javascript:alert(1)" not in html   # the unsafe url never reaches an href
+    assert "href" not in html.split("Internal links")[1]  # no anchor tag in the links list
+    assert "click me" in html                  # anchor text still shown as plain text
