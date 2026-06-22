@@ -156,6 +156,13 @@ class SheetResult(BaseModel):
     error: str | None = None
 
 
+class DraftExportResult(BaseModel):
+    html_path: str | None = None    # local outputs/<slug>-draft.html
+    doc_url: str | None = None      # Google Doc in the Shared Drive
+    is_partial: bool = False        # HTML written but Doc creation failed
+    error: str | None = None        # set only when even HTML could not be written
+
+
 class StepResult(BaseModel):
     name: str
     status: str  # "ok" | "partial" | "failed"
@@ -199,6 +206,7 @@ class JobData(BaseModel):
     keywords: KeywordResult | None = None
     topical_map: TopicalMapResult | None = None
     draft_post: DraftPostResult | None = None
+    draft_export: DraftExportResult | None = None
     render: RenderResult | None = None
     sheet: SheetResult | None = None
     run_report: RunReport | None = None

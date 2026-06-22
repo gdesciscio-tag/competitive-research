@@ -214,3 +214,16 @@ def test_run_report_and_jobdata_run_report():
     assert restored.total_cost_usd == 0.03
     data = JobData(config=JobConfig(client_name="X", client_url="https://x.com"))
     assert data.run_report is None
+
+
+def test_draft_export_result_defaults_and_jobdata_field():
+    from compresearch.models import DraftExportResult, JobData, JobConfig
+
+    r = DraftExportResult()
+    assert r.html_path is None
+    assert r.doc_url is None
+    assert r.is_partial is False
+    assert r.error is None
+
+    data = JobData(config=JobConfig(client_name="X", client_url="https://x.com"))
+    assert data.draft_export is None  # field exists, defaults to None
