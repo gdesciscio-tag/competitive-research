@@ -18,6 +18,16 @@ from compresearch.utils import short_domain
 TEMPLATES_DIR = Path(__file__).parent / "templates"
 
 
+def markdown_to_html(md: str) -> str:
+    """Render Markdown to HTML using the project's standard extensions.
+
+    Shared by the PDF report context and the draft-export module so the draft renders
+    identically in both. The output is trusted LLM content; see the trust-boundary note
+    in build_report_context before serving it to a browser.
+    """
+    return markdown.markdown(md, extensions=["extra", "sane_lists"])
+
+
 def _bar_chart_svg(
     labels: list[str],
     values: list[int],
@@ -164,7 +174,7 @@ def build_report_context(data: JobData, branding: Branding, report_date: str | N
             # body_html is trusted LLM output, rendered with |safe in the template without
             # sanitization. Trust boundary: LLM -> agency -> static client PDF. If this HTML
             # is ever served to a browser or sourced from untrusted models, sanitize first.
-            "body_html": markdown.markdown(post.body_markdown, extensions=["extra", "sane_lists"]),
+            "body_html": markdown_to_html(post.body_markdown),
             "internal_links": [{"anchor": l.anchor, "url": l.url} for l in post.internal_links],
         }
 

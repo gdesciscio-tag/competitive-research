@@ -245,3 +245,10 @@ def test_render_report_html_shows_draft_title():
     # the draft title renders as a heading even if the body has no H1
     html = render_report_html(build_report_context(_full_jobdata(), Branding()))
     assert "<h3>What is a CRM?</h3>" in html
+
+
+def test_markdown_to_html_renders_bold_and_headings():
+    from compresearch.render import markdown_to_html
+    html = markdown_to_html("# Title\n\nA **bold** word.")
+    assert "<h1>Title</h1>" in html
+    assert "<strong>bold</strong>" in html
