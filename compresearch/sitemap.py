@@ -171,15 +171,46 @@ def analyze_domain(domain_url: str, fetch: Fetcher) -> DomainSitemap:
     )
 
 
+# CMS/theme taxonomy and system path segments that aren't real content sections.
+_NON_CONTENT_SECTIONS = {
+    "author", "authors", "category", "categories", "tag", "tags", "type", "types",
+    "feed", "page", "comment-page", "attachment", "embed", "amp", "search", "login",
+    "cart", "checkout", "account", "wp-json", "wp-admin", "wp-content", "wp-includes",
+    "portfolio_category", "portfolio-items", "casestudies-categories", "(root)",
+    "(individual pages)",
+}
+_NON_CONTENT_PREFIXES = ("colio", "elementor", "wp-")
+_NON_CONTENT_SUFFIXES = ("-categories", "-category", "_category", "_categories",
+                         "_tag", "_group", "_item")
+
+
+def _is_content_section(name: str) -> bool:
+    """True if a section name looks like real content (not a CMS taxonomy/system path)."""
+    lowered = name.lower()
+    if lowered in _NON_CONTENT_SECTIONS:
+        return False
+    if lowered.startswith(_NON_CONTENT_PREFIXES):
+        return False
+    if lowered.endswith(_NON_CONTENT_SUFFIXES):
+        return False
+    return True
+
+
 def _find_gaps(
     client: DomainSitemap, competitors: list[DomainSitemap]
 ) -> list[SitemapGap]:
-    """Sections one or more competitors have that the client has zero of."""
+    """Content sections one or more competitors have that the client has zero of.
+
+    CMS taxonomy / system paths (categories, tags, author archives, theme artifacts) are
+    excluded — they aren't content-strategy gaps.
+    """
     if client.error:
         return []
     competitor_sections: dict[str, list[str]] = {}
     for comp in competitors:
         for section in comp.section_counts:
+            if not _is_content_section(section):
+                continue
             competitor_sections.setdefault(section, []).append(comp.domain)
 
     gaps: list[SitemapGap] = []

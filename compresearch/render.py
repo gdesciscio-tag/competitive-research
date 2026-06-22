@@ -117,6 +117,11 @@ def build_report_context(data: JobData, branding: Branding, report_date: str | N
             {"section": g.section, "competitors": [short_domain(d) for d in g.competitors_with]}
             for g in data.sitemap.gaps
         ]
+    # Show the most widely-shared gaps in the PDF; the Sheet has the full list.
+    GAP_DISPLAY_LIMIT = 12
+    sitemap_gap_total = len(sitemap_gaps)
+    sitemap_gap_overflow = max(0, sitemap_gap_total - GAP_DISPLAY_LIMIT)
+    sitemap_gaps_display = sitemap_gaps[:GAP_DISPLAY_LIMIT]
 
     # --- keywords ---
     keyword_gaps: list[dict] = []
@@ -186,12 +191,17 @@ def build_report_context(data: JobData, branding: Branding, report_date: str | N
         "report_date": report_date or "",
         "summary": {
             "competitor_count": len(config.competitor_urls),
-            "content_gap_count": len(sitemap_gaps),
+            "content_gap_count": sitemap_gap_total,
             "keyword_gap_count": len(keyword_gaps),
             "quick_win_count": len(quick_wins),
             "is_partial": is_partial,
         },
-        "sitemap": {"client_total": client_total, "domains": sitemap_domains, "gaps": sitemap_gaps},
+        "sitemap": {
+            "client_total": client_total,
+            "domains": sitemap_domains,
+            "gaps": sitemap_gaps_display,
+            "gap_overflow": sitemap_gap_overflow,
+        },
         "keywords": {"gaps": keyword_gaps, "quick_wins": quick_wins},
         "topical_map": {"pillars": pillars, "summary": topical_summary},
         "draft": draft,

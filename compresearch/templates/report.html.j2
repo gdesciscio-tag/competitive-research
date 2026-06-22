@@ -75,8 +75,12 @@
   {% endif %}
   {% if sitemap.gaps %}
   <h3>Content-type gaps</h3>
-  <p class="muted">Sections competitors publish that {{ client_name }} does not:</p>
-  {% for g in sitemap.gaps %}<span class="pill">{{ g.section }} &middot; {{ g.competitors | join(', ') }}</span>{% endfor %}
+  <p class="muted">Content sections competitors publish that {{ client_name }} does not &mdash; most widely shared first:</p>
+  <table>
+    <tr><th>Content section</th><th>Published by</th></tr>
+    {% for g in sitemap.gaps %}<tr><td>{{ g.section }}</td><td>{{ g.competitors | join(', ') }}</td></tr>{% endfor %}
+  </table>
+  {% if sitemap.gap_overflow %}<p class="muted">&hellip;and {{ sitemap.gap_overflow }} more &mdash; see the Google Sheet appendix for the full list.</p>{% endif %}
   {% else %}<p class="muted">No major content-type gaps detected.</p>{% endif %}
 </section>
 

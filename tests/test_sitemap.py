@@ -107,6 +107,29 @@ def test_categorize_folds_distinct_root_slugs_together():
     assert counts == {"(individual pages)": 2}
 
 
+def test_is_content_section_filters_cms_noise():
+    from compresearch.sitemap import _is_content_section
+    for keep in ("case-studies", "services", "service-areas", "blog", "industries"):
+        assert _is_content_section(keep) is True, keep
+    for drop in ("author", "category", "tag", "type", "colio_item", "colio_group",
+                 "portfolio_category", "casestudies-categories", "product_category",
+                 "(root)", "(individual pages)"):
+        assert _is_content_section(drop) is False, drop
+
+
+def test_find_gaps_excludes_cms_taxonomy():
+    from compresearch.sitemap import _find_gaps
+    from compresearch.models import DomainSitemap
+    client = DomainSitemap(domain="https://acme.com", section_counts={"blog": 3})
+    rival = DomainSitemap(
+        domain="https://rival.com",
+        section_counts={"case-studies": 2, "category": 9, "tag": 40, "colio_item": 5},
+    )
+    sections = [g.section for g in _find_gaps(client, [rival])]
+    assert "case-studies" in sections
+    assert "category" not in sections and "tag" not in sections and "colio_item" not in sections
+
+
 from compresearch.sitemap import infer_cadence
 
 

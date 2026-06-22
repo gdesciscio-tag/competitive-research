@@ -150,6 +150,30 @@ def test_render_report_html_contains_key_sections():
     assert "#16314F" in html or "#E2703A" in html  # branding colors applied
 
 
+def _jobdata_with_n_gaps(n):
+    from compresearch.models import (
+        JobConfig, JobData, SitemapResult, DomainSitemap, SitemapGap,
+    )
+    gaps = [SitemapGap(section=f"sec-{i}", competitors_with=["https://rival.com"]) for i in range(n)]
+    return JobData(
+        config=JobConfig(client_name="Acme Co", client_url="https://acme.com"),
+        sitemap=SitemapResult(client=DomainSitemap(domain="https://acme.com"), gaps=gaps),
+    )
+
+
+def test_build_report_context_caps_gaps_but_counts_all():
+    ctx = build_report_context(_jobdata_with_n_gaps(20), Branding())
+    assert ctx["summary"]["content_gap_count"] == 20   # full count in the exec summary
+    assert len(ctx["sitemap"]["gaps"]) == 12           # capped for the PDF
+    assert ctx["sitemap"]["gap_overflow"] == 8
+
+
+def test_render_report_html_renders_gaps_as_table_with_overflow():
+    html = render_report_html(build_report_context(_jobdata_with_n_gaps(20), Branding()))
+    assert "Published by" in html        # rendered as a table, not a pill cloud
+    assert "and 8 more" in html          # overflow pointer to the Sheet
+
+
 def test_render_report_html_embeds_logo_inline(tmp_path):
     logo = tmp_path / "logo.svg"
     logo.write_text("<svg xmlns='http://www.w3.org/2000/svg'></svg>", encoding="utf-8")
