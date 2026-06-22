@@ -141,6 +141,11 @@ def test_dataforseo_provider_uses_injected_raw_fetch():
     assert entries[0].keyword == "crm software"
 
 
+def test_dataforseo_provider_default_limit_is_200():
+    # Keep the per-domain keyword cap modest to bound DataForSEO cost.
+    assert DataForSEOProvider(login="x", password="y")._limit == 200
+
+
 from compresearch.keywords import analyze_keywords
 from compresearch.models import KeywordEntry
 

@@ -142,7 +142,7 @@ class DataForSEOProvider:
         password: str,
         location_code: int = 2840,   # United States
         language_name: str = "English",
-        limit: int = 1000,
+        limit: int = 200,   # ranked keywords pulled per domain (caps DataForSEO cost)
         raw_fetch: Callable[[str], dict] | None = None,
     ) -> None:
         self._login = login
