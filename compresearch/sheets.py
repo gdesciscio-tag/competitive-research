@@ -80,27 +80,29 @@ def build_format_requests(tab: "SheetTab", sheet_id: int, branding: Branding) ->
             "fields": "gridProperties.frozenRowCount",
         }})
 
-    for col, pattern in sorted(tab.number_formats.items()):
-        requests.append({"repeatCell": {
-            "range": {"sheetId": sheet_id, "startRowIndex": 1, "endRowIndex": max(n_rows, 1),
-                      "startColumnIndex": col, "endColumnIndex": col + 1},
-            "cell": {"userEnteredFormat": {"numberFormat": {"type": "NUMBER", "pattern": pattern}}},
-            "fields": "userEnteredFormat.numberFormat",
-        }})
+    if n_rows > 1:
+        for col, pattern in sorted(tab.number_formats.items()):
+            requests.append({"repeatCell": {
+                "range": {"sheetId": sheet_id, "startRowIndex": 1, "endRowIndex": n_rows,
+                          "startColumnIndex": col, "endColumnIndex": col + 1},
+                "cell": {"userEnteredFormat": {"numberFormat": {"type": "NUMBER", "pattern": pattern}}},
+                "fields": "userEnteredFormat.numberFormat",
+            }})
 
-    for scale in tab.color_scales:
-        low, high = (_GREEN, _RED) if scale.direction == "low_good" else (_RED, _GREEN)
-        requests.append({"addConditionalFormatRule": {
-            "rule": {
-                "ranges": [{"sheetId": sheet_id, "startRowIndex": 1, "endRowIndex": max(n_rows, 1),
-                            "startColumnIndex": scale.col, "endColumnIndex": scale.col + 1}],
-                "gradientRule": {
-                    "minpoint": {"color": low, "type": "MIN"},
-                    "maxpoint": {"color": high, "type": "MAX"},
+    if n_rows > 1:
+        for scale in tab.color_scales:
+            low, high = (_GREEN, _RED) if scale.direction == "low_good" else (_RED, _GREEN)
+            requests.append({"addConditionalFormatRule": {
+                "rule": {
+                    "ranges": [{"sheetId": sheet_id, "startRowIndex": 1, "endRowIndex": n_rows,
+                                "startColumnIndex": scale.col, "endColumnIndex": scale.col + 1}],
+                    "gradientRule": {
+                        "minpoint": {"color": low, "type": "MIN"},
+                        "maxpoint": {"color": high, "type": "MAX"},
+                    },
                 },
-            },
-            "index": 0,
-        }})
+                "index": 0,
+            }})
 
     if tab.basic_filter:
         requests.append({"setBasicFilter": {"filter": {

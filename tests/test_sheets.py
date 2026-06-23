@@ -324,3 +324,20 @@ def test_build_format_requests_empty_for_plain_tab():
     from compresearch.models import Branding
     tab = SheetTab("Draft Post", [["Title", "X"]])   # no formatting flags
     assert build_format_requests(tab, sheet_id=1, branding=Branding()) == []
+
+
+def test_build_format_requests_skips_numbers_and_scales_when_no_data_rows():
+    from compresearch.sheets import build_format_requests, SheetTab, ColorScale
+    from compresearch.models import Branding
+    # header-only tab (no data rows) must not emit zero-height number-format / color-scale ranges
+    tab = SheetTab("Keyword Gaps", [["Keyword", "Difficulty"]],
+                   header=True, basic_filter=True,
+                   number_formats={1: "#,##0"}, color_scales=[ColorScale(1, "low_good")])
+    reqs = build_format_requests(tab, sheet_id=7, branding=Branding())
+    kinds = [next(iter(r)) for r in reqs]
+    assert "addConditionalFormatRule" not in kinds
+    # the only repeatCell is the header style (row 0), not a number format
+    assert all(r["repeatCell"]["range"].get("startRowIndex") == 0
+               for r in reqs if "repeatCell" in r)
+    # header + freeze + filter still emitted
+    assert "updateSheetProperties" in kinds and "setBasicFilter" in kinds
