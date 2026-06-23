@@ -41,6 +41,16 @@ def _cell(value):
     return "" if value is None else value
 
 
+def _safe_value(cell):
+    """Neutralize accidental formula injection. Values are written with USER_ENTERED
+    (raw=False) so that intended =HYPERLINK formulas evaluate; that also means a text cell
+    starting with = + - @ would be parsed as a formula. Prefix such text with an apostrophe
+    (renders as plain text) while leaving real =HYPERLINK formulas untouched."""
+    if isinstance(cell, str) and cell[:1] in ("=", "+", "-", "@") and not cell.startswith("=HYPERLINK("):
+        return "'" + cell
+    return cell
+
+
 # Fixed semantic heatmap endpoints (not brand colors).
 _GREEN = {"red": 0.42, "green": 0.66, "blue": 0.31}
 _RED = {"red": 0.85, "green": 0.33, "blue": 0.31}
@@ -92,7 +102,12 @@ def build_format_requests(tab: "SheetTab", sheet_id: int, branding: Branding) ->
 
     if n_rows > 1:
         for scale in tab.color_scales:
-            low, high = (_GREEN, _RED) if scale.direction == "low_good" else (_RED, _GREEN)
+            if scale.direction == "low_good":
+                low, high = _GREEN, _RED
+            elif scale.direction == "high_good":
+                low, high = _RED, _GREEN
+            else:
+                raise ValueError(f"Unknown color scale direction: {scale.direction!r}")
             requests.append({"addConditionalFormatRule": {
                 "rule": {
                     "ranges": [{"sheetId": sheet_id, "startRowIndex": 1, "endRowIndex": n_rows,
@@ -268,7 +283,7 @@ class GoogleSheetWriter:
             if tab.rows:
                 # The Sheets API rejects empty inner rows ([]); render blank spacer rows
                 # as a single empty cell so both the layout and the API are satisfied.
-                safe_rows = [row if row else [""] for row in tab.rows]
+                safe_rows = [[_safe_value(c) for c in (row if row else [""])] for row in tab.rows]
                 worksheet.update(range_name="A1", values=safe_rows, raw=False)
             placed.append((tab, worksheet))
         spreadsheet.share(self.share_email, perm_type="user", role="writer")

@@ -40,6 +40,26 @@ def _flatten(tab: SheetTab):
     return [str(cell) for row in tab.rows for cell in row]
 
 
+def test_safe_value_neutralizes_formula_text_but_keeps_hyperlinks():
+    from compresearch.sheets import _safe_value
+    assert _safe_value("=cmd(1)") == "'=cmd(1)"      # injection text -> apostrophe-prefixed
+    assert _safe_value("+1-800") == "'+1-800"
+    assert _safe_value("-lead") == "'-lead"
+    assert _safe_value("@handle") == "'@handle"
+    assert _safe_value('=HYPERLINK("u", "u")') == '=HYPERLINK("u", "u")'  # intended formula kept
+    assert _safe_value("free crm") == "free crm"     # ordinary text untouched
+    assert _safe_value(800) == 800                   # numbers untouched
+
+
+def test_build_format_requests_rejects_unknown_color_scale_direction():
+    import pytest
+    from compresearch.sheets import build_format_requests, SheetTab, ColorScale
+    from compresearch.models import Branding
+    tab = SheetTab("X", [["h"], ["a"], ["b"]], color_scales=[ColorScale(0, "sideways")])
+    with pytest.raises(ValueError):
+        build_format_requests(tab, sheet_id=1, branding=Branding())
+
+
 def test_build_sheet_model_full_job_has_all_tabs():
     tabs = build_sheet_model(_full_jobdata())
     assert [t.name for t in tabs] == [
