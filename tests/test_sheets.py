@@ -190,3 +190,17 @@ def test_run_sheet_warns_when_no_analysis_sections(tmp_path, caplog):
     with caplog.at_level(logging.WARNING):
         run_sheet(job_dir, writer=make_fake_writer({}))
     assert "no analysis sections" in caplog.text
+
+
+def test_sheettab_formatting_fields_default_off():
+    from compresearch.sheets import SheetTab, ColorScale, TitleBlock
+    t = SheetTab("X", [["a"]])
+    assert t.header is False
+    assert t.number_formats == {}
+    assert t.color_scales == []
+    assert t.basic_filter is False
+    assert t.tab_color is False
+    assert t.title_block is None
+    # the helper types exist and carry their fields
+    assert ColorScale(2, "low_good").direction == "low_good"
+    assert TitleBlock(3).span == 3

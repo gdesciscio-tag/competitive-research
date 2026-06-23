@@ -12,9 +12,26 @@ from compresearch.settings import get_secret
 
 
 @dataclass
+class ColorScale:
+    col: int                      # 0-based column index
+    direction: str                # "low_good" (green->red) or "high_good" (red->green)
+
+
+@dataclass
+class TitleBlock:
+    span: int                     # number of columns to merge across row 0
+
+
+@dataclass
 class SheetTab:
     name: str
     rows: list[list] = field(default_factory=list)
+    header: bool = False
+    number_formats: dict[int, str] = field(default_factory=dict)
+    color_scales: list[ColorScale] = field(default_factory=list)
+    basic_filter: bool = False
+    tab_color: bool = False
+    title_block: "TitleBlock | None" = None
 
 
 def _cell(value):
