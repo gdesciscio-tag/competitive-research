@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
+from datetime import date
 from typing import Callable
 
 from compresearch.job_store import load_data, save_data
@@ -39,9 +40,9 @@ def _cell(value):
     return "" if value is None else value
 
 
-def build_sheet_model(data: JobData) -> list[SheetTab]:
-    """Turn a finished JobData into a list of sheet tabs (name + rows). Pure; only emits
-    a tab for an analysis section that is present."""
+def build_sheet_model(data: JobData, run_date: str | None = None) -> list[SheetTab]:
+    """Turn a finished JobData into a list of sheet tabs (name + rows + formatting metadata).
+    Pure; only emits a tab for an analysis section that is present."""
     config = data.config
     tabs: list[SheetTab] = []
 
@@ -49,8 +50,10 @@ def build_sheet_model(data: JobData) -> list[SheetTab]:
     sitemap_gap_count = len(data.sitemap.gaps) if data.sitemap is not None else 0
     keyword_gap_count = len(data.keywords.gaps) if data.keywords is not None else 0
     quick_win_count = len(data.keywords.quick_wins) if data.keywords is not None else 0
-    overview = [
-        ["Competitive Research"],
+    overview = [["Competitive Research"]]
+    if run_date:
+        overview.append(["Generated", run_date])
+    overview += [
         ["Client", config.client_name],
         ["Website", config.client_url],
         ["Competitors", ", ".join(config.competitor_urls)],
@@ -59,7 +62,7 @@ def build_sheet_model(data: JobData) -> list[SheetTab]:
         ["Keyword gaps", keyword_gap_count],
         ["Quick wins", quick_win_count],
     ]
-    tabs.append(SheetTab("Overview", overview))
+    tabs.append(SheetTab("Overview", overview, tab_color=True, title_block=TitleBlock(span=2)))
 
     # --- Sitemap ---
     if data.sitemap is not None:
@@ -73,7 +76,7 @@ def build_sheet_model(data: JobData) -> list[SheetTab]:
             rows += [[], ["Content gaps"], ["Section", "Competitors with it"]]
             for gap in data.sitemap.gaps:
                 rows.append([gap.section, ", ".join(short_domain(d) for d in gap.competitors_with)])
-        tabs.append(SheetTab("Sitemap", rows))
+        tabs.append(SheetTab("Sitemap", rows, header=True, number_formats={1: "#,##0"}))
 
     # --- Keywords ---
     if data.keywords is not None:
@@ -85,13 +88,26 @@ def build_sheet_model(data: JobData) -> list[SheetTab]:
                 _cell(g.best_competitor_position), _cell(g.traffic_value),
                 ", ".join(short_domain(d) for d in g.competitors_ranking),
             ])
-        tabs.append(SheetTab("Keyword Gaps", gap_rows))
+        tabs.append(SheetTab(
+            "Keyword Gaps", gap_rows, header=True, basic_filter=True,
+            number_formats={1: "#,##0", 2: "0", 3: "0", 4: "$#,##0"},
+            color_scales=[ColorScale(2, "low_good")],
+        ))
 
         win_rows = [["Keyword", "Current position", "Volume", "Est. traffic value", "URL"]]
         for w in data.keywords.quick_wins:
+            if w.url:
+                safe_url = w.url.replace('"', "%22")
+                url_cell = f'=HYPERLINK("{safe_url}", "{safe_url}")'
+            else:
+                url_cell = ""
             win_rows.append([w.keyword, w.position, _cell(w.search_volume),
-                             _cell(w.traffic_value), _cell(w.url)])
-        tabs.append(SheetTab("Quick Wins", win_rows))
+                             _cell(w.traffic_value), url_cell])
+        tabs.append(SheetTab(
+            "Quick Wins", win_rows, header=True, basic_filter=True,
+            number_formats={1: "0", 2: "#,##0", 3: "$#,##0"},
+            color_scales=[ColorScale(1, "low_good")],
+        ))
 
     # --- Topical map ---
     if data.topical_map is not None and data.topical_map.map is not None:
@@ -104,7 +120,7 @@ def build_sheet_model(data: JobData) -> list[SheetTab]:
                         _cell(article.target_keyword), _cell(article.search_intent),
                         _cell(article.estimated_volume),
                     ])
-        tabs.append(SheetTab("Topical Map", rows))
+        tabs.append(SheetTab("Topical Map", rows, header=True, number_formats={5: "#,##0"}))
 
     # --- Draft post (metadata only; the prose lives in the exported Doc/HTML) ---
     if data.draft_post is not None and data.draft_post.post is not None:
@@ -189,7 +205,7 @@ def run_sheet(job_dir, writer: SheetWriter | None = None) -> JobData:
         writer = GoogleSheetWriter.from_settings()
     title = f"{data.config.client_name} — Competitive Research"
     try:
-        tabs = build_sheet_model(data)
+        tabs = build_sheet_model(data, run_date=date.today().isoformat())
         url = writer(title, tabs)
         data.sheet = SheetResult(sheet_url=url)
     except Exception as exc:

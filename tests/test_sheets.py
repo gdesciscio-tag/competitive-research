@@ -192,6 +192,49 @@ def test_run_sheet_warns_when_no_analysis_sections(tmp_path, caplog):
     assert "no analysis sections" in caplog.text
 
 
+def test_build_sheet_model_declares_formatting():
+    data = _full_jobdata()
+    tabs = {t.name: t for t in build_sheet_model(data, run_date="2026-06-23")}
+
+    overview = tabs["Overview"]
+    assert overview.tab_color is True
+    assert overview.title_block is not None and overview.title_block.span == 2
+    assert any(row == ["Generated", "2026-06-23"] for row in overview.rows)
+
+    kg = tabs["Keyword Gaps"]
+    assert kg.header is True
+    assert kg.basic_filter is True
+    assert kg.number_formats == {1: "#,##0", 2: "0", 3: "0", 4: "$#,##0"}
+    assert any(cs.col == 2 and cs.direction == "low_good" for cs in kg.color_scales)
+
+    qw = tabs["Quick Wins"]
+    assert qw.header is True and qw.basic_filter is True
+    assert qw.number_formats == {1: "0", 2: "#,##0", 3: "$#,##0"}
+    assert any(cs.col == 1 and cs.direction == "low_good" for cs in qw.color_scales)
+    # URL column became a clickable HYPERLINK (row 1 is the single quick-win)
+    assert any("HYPERLINK" in str(c) and "acme.com/crm" in str(c) for c in qw.rows[1])
+
+    assert tabs["Sitemap"].header is True
+    assert tabs["Sitemap"].number_formats == {1: "#,##0"}
+    assert tabs["Topical Map"].header is True
+    assert tabs["Topical Map"].number_formats == {5: "#,##0"}
+
+
+def test_build_sheet_model_no_run_date_omits_generated_row():
+    data = _full_jobdata()
+    overview = next(t for t in build_sheet_model(data) if t.name == "Overview")
+    assert not any(row and row[0] == "Generated" for row in overview.rows)
+
+
+def test_quick_wins_blank_url_is_not_hyperlink():
+    data = JobData(
+        config=JobConfig(client_name="X", client_url="https://x.com"),
+        keywords=KeywordResult(quick_wins=[QuickWin(keyword="bare", position=5)]),  # url=None
+    )
+    qw = next(t for t in build_sheet_model(data) if t.name == "Quick Wins")
+    assert qw.rows[1][4] == ""          # blank, not =HYPERLINK("")
+
+
 def test_sheettab_formatting_fields_default_off():
     from compresearch.sheets import SheetTab, ColorScale, TitleBlock
     t = SheetTab("X", [["a"]])
