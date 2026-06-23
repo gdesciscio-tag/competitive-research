@@ -7,7 +7,7 @@ from datetime import date
 from typing import Callable
 
 from compresearch.job_store import load_data, save_data
-from compresearch.models import JobData, SheetResult
+from compresearch.models import Branding, JobData, SheetResult
 from compresearch.utils import short_domain
 from compresearch.settings import get_secret
 
@@ -38,6 +38,99 @@ class SheetTab:
 def _cell(value):
     """Google Sheets cells: render None as an empty string."""
     return "" if value is None else value
+
+
+# Fixed semantic heatmap endpoints (not brand colors).
+_GREEN = {"red": 0.42, "green": 0.66, "blue": 0.31}
+_RED = {"red": 0.85, "green": 0.33, "blue": 0.31}
+
+
+def _hex_to_rgb(hex_color: str) -> dict:
+    """Convert '#RRGGBB' to a Sheets API color dict with 0..1 float channels."""
+    h = hex_color.lstrip("#")
+    return {
+        "red": int(h[0:2], 16) / 255,
+        "green": int(h[2:4], 16) / 255,
+        "blue": int(h[4:6], 16) / 255,
+    }
+
+
+def build_format_requests(tab: "SheetTab", sheet_id: int, branding: Branding) -> list[dict]:
+    """Translate a tab's formatting metadata into raw Sheets API request objects (pure).
+
+    Returns [] for a tab with no formatting flags. Ranges are 0-based half-open and scoped
+    to sheet_id. Brand colors come from branding; heatmap endpoints are fixed semantic colors.
+    """
+    requests: list[dict] = []
+    n_rows = len(tab.rows)
+    n_cols = max((len(r) for r in tab.rows), default=1)
+    brand = _hex_to_rgb(branding.primary_color)
+
+    if tab.header:
+        requests.append({"repeatCell": {
+            "range": {"sheetId": sheet_id, "startRowIndex": 0, "endRowIndex": 1},
+            "cell": {"userEnteredFormat": {
+                "backgroundColor": brand,
+                "textFormat": {"bold": True, "foregroundColor": {"red": 1, "green": 1, "blue": 1}},
+            }},
+            "fields": "userEnteredFormat(backgroundColor,textFormat)",
+        }})
+        requests.append({"updateSheetProperties": {
+            "properties": {"sheetId": sheet_id, "gridProperties": {"frozenRowCount": 1}},
+            "fields": "gridProperties.frozenRowCount",
+        }})
+
+    for col, pattern in sorted(tab.number_formats.items()):
+        requests.append({"repeatCell": {
+            "range": {"sheetId": sheet_id, "startRowIndex": 1, "endRowIndex": max(n_rows, 1),
+                      "startColumnIndex": col, "endColumnIndex": col + 1},
+            "cell": {"userEnteredFormat": {"numberFormat": {"type": "NUMBER", "pattern": pattern}}},
+            "fields": "userEnteredFormat.numberFormat",
+        }})
+
+    for scale in tab.color_scales:
+        low, high = (_GREEN, _RED) if scale.direction == "low_good" else (_RED, _GREEN)
+        requests.append({"addConditionalFormatRule": {
+            "rule": {
+                "ranges": [{"sheetId": sheet_id, "startRowIndex": 1, "endRowIndex": max(n_rows, 1),
+                            "startColumnIndex": scale.col, "endColumnIndex": scale.col + 1}],
+                "gradientRule": {
+                    "minpoint": {"color": low, "type": "MIN"},
+                    "maxpoint": {"color": high, "type": "MAX"},
+                },
+            },
+            "index": 0,
+        }})
+
+    if tab.basic_filter:
+        requests.append({"setBasicFilter": {"filter": {
+            "range": {"sheetId": sheet_id, "startRowIndex": 0, "endRowIndex": max(n_rows, 1),
+                      "startColumnIndex": 0, "endColumnIndex": n_cols},
+        }}})
+
+    if tab.tab_color:
+        requests.append({"updateSheetProperties": {
+            "properties": {"sheetId": sheet_id, "tabColor": brand},
+            "fields": "tabColor",
+        }})
+
+    if tab.title_block is not None:
+        span = tab.title_block.span
+        requests.append({"mergeCells": {
+            "range": {"sheetId": sheet_id, "startRowIndex": 0, "endRowIndex": 1,
+                      "startColumnIndex": 0, "endColumnIndex": span},
+            "mergeType": "MERGE_ALL",
+        }})
+        requests.append({"repeatCell": {
+            "range": {"sheetId": sheet_id, "startRowIndex": 0, "endRowIndex": 1,
+                      "startColumnIndex": 0, "endColumnIndex": span},
+            "cell": {"userEnteredFormat": {
+                "textFormat": {"bold": True, "fontSize": 14, "foregroundColor": brand},
+            }},
+            "fields": "userEnteredFormat.textFormat",
+        }})
+
+    return requests
 
 
 def build_sheet_model(data: JobData, run_date: str | None = None) -> list[SheetTab]:

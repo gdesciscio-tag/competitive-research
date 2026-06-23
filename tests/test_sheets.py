@@ -247,3 +247,80 @@ def test_sheettab_formatting_fields_default_off():
     # the helper types exist and carry their fields
     assert ColorScale(2, "low_good").direction == "low_good"
     assert TitleBlock(3).span == 3
+
+
+def test_hex_to_rgb():
+    from compresearch.sheets import _hex_to_rgb
+    rgb = _hex_to_rgb("#AB1D42")
+    assert round(rgb["red"], 3) == round(171 / 255, 3)
+    assert round(rgb["green"], 3) == round(29 / 255, 3)
+    assert round(rgb["blue"], 3) == round(66 / 255, 3)
+
+
+def _req_types(requests):
+    return [next(iter(r)) for r in requests]
+
+
+def test_build_format_requests_header_freeze_and_number_formats():
+    from compresearch.sheets import build_format_requests, SheetTab, _hex_to_rgb
+    from compresearch.models import Branding
+    branding = Branding(primary_color="#AB1D42")
+    tab = SheetTab("Keyword Gaps",
+                   [["Keyword", "Volume"], ["free crm", 800]],
+                   header=True, number_formats={1: "#,##0"})
+    reqs = build_format_requests(tab, sheet_id=99, branding=branding)
+    types = _req_types(reqs)
+    assert "repeatCell" in types          # header style + number format both use repeatCell
+    assert "updateSheetProperties" in types  # frozen row
+    # header repeatCell carries the brand background and targets sheet 99
+    header_req = next(r["repeatCell"] for r in reqs
+                      if "repeatCell" in r and r["repeatCell"]["range"].get("startRowIndex") == 0
+                      and r["repeatCell"]["range"].get("endRowIndex") == 1)
+    assert header_req["range"]["sheetId"] == 99
+    bg = header_req["cell"]["userEnteredFormat"]["backgroundColor"]
+    assert round(bg["red"], 3) == round(171 / 255, 3)
+    assert header_req["cell"]["userEnteredFormat"]["textFormat"]["bold"] is True
+    # a number-format repeatCell exists for column 1 with the pattern
+    num_req = next(r["repeatCell"] for r in reqs
+                   if "repeatCell" in r
+                   and r["repeatCell"]["cell"]["userEnteredFormat"].get("numberFormat", {}).get("pattern") == "#,##0")
+    assert num_req["range"]["startColumnIndex"] == 1
+    assert num_req["range"]["startRowIndex"] == 1   # data rows only, below header
+    # frozen row
+    freeze = next(r["updateSheetProperties"] for r in reqs if "updateSheetProperties" in r
+                  and "gridProperties" in r["updateSheetProperties"]["properties"])
+    assert freeze["properties"]["gridProperties"]["frozenRowCount"] == 1
+
+
+def test_build_format_requests_color_scale_filter_tabcolor_title():
+    from compresearch.sheets import build_format_requests, SheetTab, ColorScale, TitleBlock
+    from compresearch.models import Branding
+    branding = Branding(primary_color="#AB1D42")
+
+    kg = SheetTab("Keyword Gaps", [["Keyword", "Difficulty"], ["a", 30]],
+                  header=True, basic_filter=True, color_scales=[ColorScale(1, "low_good")])
+    reqs = build_format_requests(kg, sheet_id=5, branding=branding)
+    types = _req_types(reqs)
+    assert "addConditionalFormatRule" in types
+    assert "setBasicFilter" in types
+    grad = next(r["addConditionalFormatRule"]["rule"]["gradientRule"]
+                for r in reqs if "addConditionalFormatRule" in r)
+    # low_good: MIN point is green-ish (more green than red), MAX point is red-ish
+    assert grad["minpoint"]["color"]["green"] > grad["minpoint"]["color"]["red"]
+    assert grad["maxpoint"]["color"]["red"] > grad["maxpoint"]["color"]["green"]
+
+    ov = SheetTab("Overview", [["Competitive Research"], ["Client", "Acme"]],
+                  tab_color=True, title_block=TitleBlock(span=2))
+    reqs2 = build_format_requests(ov, sheet_id=0, branding=branding)
+    types2 = _req_types(reqs2)
+    assert "mergeCells" in types2
+    assert "updateSheetProperties" in types2   # tab color
+    merge = next(r["mergeCells"]["range"] for r in reqs2 if "mergeCells" in r)
+    assert merge["startRowIndex"] == 0 and merge["endColumnIndex"] == 2
+
+
+def test_build_format_requests_empty_for_plain_tab():
+    from compresearch.sheets import build_format_requests, SheetTab
+    from compresearch.models import Branding
+    tab = SheetTab("Draft Post", [["Title", "X"]])   # no formatting flags
+    assert build_format_requests(tab, sheet_id=1, branding=Branding()) == []
