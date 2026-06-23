@@ -86,7 +86,12 @@ class ClaudeTopicalMapGenerator:
         self,
         client: anthropic.Anthropic | None = None,
         model: str = DEFAULT_TOPICAL_MAP_MODEL,
-        max_tokens: int = 16000,
+        # Adaptive thinking shares this budget with the visible output, so the
+        # map JSON needs headroom beyond what thinking consumes. A rich grounding
+        # set (many keyword gaps + a deep sitemap) produces a large map; 16K left
+        # too little after thinking and truncated the JSON mid-string. Sonnet 4.6
+        # allows up to 64K output — 32K is safe non-streaming and ample here.
+        max_tokens: int = 32000,
     ) -> None:
         self.client = client or anthropic.Anthropic()
         self.model = model
@@ -94,7 +99,11 @@ class ClaudeTopicalMapGenerator:
         self.last_usage: dict | None = None
 
     def __call__(self, prompt: str) -> TopicalMap:
-        response = self.client.messages.parse(
+        # With max_tokens this high the SDK's non-streaming guard would refuse the
+        # request (it estimates >10 min from max_tokens alone). A topical-map call
+        # actually returns in well under a minute, so we set an explicit, generous
+        # timeout to suppress the guard rather than restructuring into a stream.
+        response = self.client.with_options(timeout=1800.0).messages.parse(
             model=self.model,
             max_tokens=self.max_tokens,
             thinking={"type": "adaptive"},

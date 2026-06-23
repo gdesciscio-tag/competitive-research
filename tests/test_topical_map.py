@@ -114,6 +114,9 @@ def test_generator_raises_when_parsed_output_is_none():
     class _Client:
         messages = _Messages()
 
+        def with_options(self, **kwargs):
+            return self
+
     gen = ClaudeTopicalMapGenerator(client=_Client())
     with pytest.raises(RuntimeError):
         gen("some prompt")
@@ -175,6 +178,9 @@ def test_generator_records_last_usage():
 
     class _Client:
         messages = _Messages()
+
+        def with_options(self, **kwargs):
+            return self
 
     gen = ClaudeTopicalMapGenerator(client=_Client())
     assert gen.last_usage is None          # nothing recorded before the first call

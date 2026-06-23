@@ -65,6 +65,10 @@ def fetch_sitemap_urls(
     _seen.add(sitemap_url)
 
     content = _maybe_gunzip(sitemap_url, fetch(sitemap_url))
+    # Some servers emit stray leading whitespace (a blank line from PHP output, etc.)
+    # before the XML declaration, which lxml rejects. Strip it so an otherwise-valid
+    # sitemap still parses.
+    content = content.lstrip()
     root = etree.fromstring(content)
 
     if etree.QName(root).localname == "sitemapindex":

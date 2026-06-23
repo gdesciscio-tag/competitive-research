@@ -58,6 +58,20 @@ def test_fetch_handles_gzip(make_fetch, urlset):
     assert len(entries) == 3
 
 
+def test_fetch_tolerates_leading_whitespace(make_fetch, urlset):
+    """Some servers emit a stray newline before the XML declaration (e.g. atshire.com)."""
+    fetch = make_fetch({"https://acme.com/sitemap.xml": b"\n" + urlset})
+    entries = fetch_sitemap_urls("https://acme.com/sitemap.xml", fetch)
+    assert len(entries) == 3
+
+
+def test_fetch_tolerates_utf8_bom(make_fetch, urlset):
+    """A UTF-8 BOM before the declaration must not break parsing."""
+    fetch = make_fetch({"https://acme.com/sitemap.xml": b"\xef\xbb\xbf" + urlset})
+    entries = fetch_sitemap_urls("https://acme.com/sitemap.xml", fetch)
+    assert len(entries) == 3
+
+
 from compresearch.sitemap import categorize_urls
 from compresearch.models import UrlEntry
 
