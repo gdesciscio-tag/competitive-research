@@ -156,7 +156,7 @@ def test_google_sheet_writer_sanitizes_empty_rows():
         def update_title(self, name):
             pass
 
-        def update(self, range_name=None, values=None):
+        def update(self, range_name=None, values=None, **kwargs):
             updates.append(values)
 
     class _SS:
@@ -341,3 +341,78 @@ def test_build_format_requests_skips_numbers_and_scales_when_no_data_rows():
                for r in reqs if "repeatCell" in r)
     # header + freeze + filter still emitted
     assert "updateSheetProperties" in kinds and "setBasicFilter" in kinds
+
+
+def _formatting_fake_spreadsheet():
+    """A fake gspread Spreadsheet/Worksheet that records batch_update calls."""
+    captured = {"batch": None, "updates": []}
+
+    class _WS:
+        _next_id = 0
+
+        def __init__(self):
+            _WS._next_id += 1
+            self.id = _WS._next_id
+
+        def update_title(self, name):
+            pass
+
+        def update(self, range_name=None, values=None, **kwargs):
+            captured["updates"].append(values)
+
+    class _SS:
+        url = "https://docs.google.com/spreadsheets/d/FAKE"
+
+        def __init__(self):
+            self.sheet1 = _WS()
+
+        def add_worksheet(self, title, rows, cols):
+            return _WS()
+
+        def share(self, email, perm_type, role):
+            pass
+
+        def batch_update(self, body):
+            captured["batch"] = body
+            return body
+
+    class _Client:
+        def create(self, title, folder_id=None):
+            return _SS()
+
+    return _Client(), captured
+
+
+def test_writer_sends_one_batched_format_update():
+    from compresearch.sheets import GoogleSheetWriter, build_sheet_model
+    from compresearch.models import Branding
+    client, captured = _formatting_fake_spreadsheet()
+    writer = GoogleSheetWriter(client, "team@example.com", branding=Branding(primary_color="#AB1D42"))
+    tabs = build_sheet_model(_full_jobdata(), run_date="2026-06-23")
+    url = writer("Acme — Competitive Research", tabs)
+    assert url.endswith("FAKE")
+    assert captured["batch"] is not None
+    reqs = captured["batch"]["requests"]
+    # header styling + a basic filter both made it into the single batch
+    kinds = {next(iter(r)) for r in reqs}
+    assert "repeatCell" in kinds and "setBasicFilter" in kinds and "updateSheetProperties" in kinds
+
+
+def test_writer_formatting_failure_still_returns_url():
+    from compresearch.sheets import GoogleSheetWriter, build_sheet_model
+    from compresearch.models import Branding
+    client, captured = _formatting_fake_spreadsheet()
+
+    ss = client.create("t")
+    def boom(body):
+        raise RuntimeError("bad request")
+    # Patch the spreadsheet instance the writer will create to raise on batch_update.
+    class _Client2:
+        def create(self, title, folder_id=None):
+            s = ss
+            s.batch_update = boom
+            return s
+    writer = GoogleSheetWriter(_Client2(), "team@example.com", branding=Branding())
+    tabs = build_sheet_model(_full_jobdata(), run_date="2026-06-23")
+    url = writer("Acme — Competitive Research", tabs)   # must NOT raise
+    assert url.endswith("FAKE")

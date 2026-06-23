@@ -10,6 +10,7 @@ from compresearch.job_store import load_data, save_data
 from compresearch.models import Branding, JobData, SheetResult
 from compresearch.utils import short_domain
 from compresearch.settings import get_secret
+from compresearch.branding import load_branding
 
 
 @dataclass
@@ -243,15 +244,18 @@ class GoogleSheetWriter:
     """Writes the sheet model to a new Google Sheet via gspread and shares it. gspread is
     imported lazily so importing this module (and the test suite) does not require it."""
 
-    def __init__(self, client, share_email: str, folder_id: str | None = None) -> None:
+    def __init__(self, client, share_email: str, folder_id: str | None = None,
+                 branding: Branding | None = None) -> None:
         self.client = client
         self.share_email = share_email
         self.folder_id = folder_id
+        self.branding = branding
 
     def __call__(self, title: str, tabs: list[SheetTab]) -> str:
         # When a Shared Drive (or folder) id is configured, create the Sheet inside it so
         # the file is owned by the drive rather than the quota-less service account.
         spreadsheet = self.client.create(title, folder_id=self.folder_id)
+        placed: list[tuple[SheetTab, object]] = []
         for index, tab in enumerate(tabs):
             cols = max((len(row) for row in tab.rows), default=1)
             if index == 0:
@@ -265,9 +269,24 @@ class GoogleSheetWriter:
                 # The Sheets API rejects empty inner rows ([]); render blank spacer rows
                 # as a single empty cell so both the layout and the API are satisfied.
                 safe_rows = [row if row else [""] for row in tab.rows]
-                worksheet.update(range_name="A1", values=safe_rows)
+                worksheet.update(range_name="A1", values=safe_rows, raw=False)
+            placed.append((tab, worksheet))
         spreadsheet.share(self.share_email, perm_type="user", role="writer")
+        self._apply_formatting(spreadsheet, placed)
         return spreadsheet.url
+
+    def _apply_formatting(self, spreadsheet, placed) -> None:
+        """Best-effort: a formatting failure must never lose the already-written data."""
+        try:
+            branding = self.branding or load_branding()
+            requests: list[dict] = []
+            for tab, worksheet in placed:
+                requests += build_format_requests(tab, worksheet.id, branding)
+            if not requests:
+                return
+            spreadsheet.batch_update({"requests": requests})
+        except Exception as exc:
+            logging.warning("Sheet formatting failed (data is intact): %s", exc)
 
     @classmethod
     def from_settings(cls) -> "GoogleSheetWriter":
@@ -280,7 +299,8 @@ class GoogleSheetWriter:
             raise RuntimeError("GOOGLE_SHARE_EMAIL must be set to share the created Google Sheet")
         import gspread
 
-        return cls(gspread.service_account(filename=sa_path), share_email, folder_id or None)
+        return cls(gspread.service_account(filename=sa_path), share_email, folder_id or None,
+                   load_branding())
 
 
 def run_sheet(job_dir, writer: SheetWriter | None = None) -> JobData:
