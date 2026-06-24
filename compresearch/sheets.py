@@ -198,6 +198,26 @@ def _sheet_tab_name(name: str) -> str:
     return name.translate(_INVALID_TAB_CHARS)[:100].strip() or "Sheet"
 
 
+_MAX_INVENTORY_ROWS = 500  # cap per-domain page lists so a 2,000-URL site stays usable
+
+
+def _url_inventory_rows(dom) -> list[list]:
+    """Rows for a single domain's crawled pages — newest first, undated last — with
+    an empty Notes column for the strategist to annotate. Long lists are truncated."""
+    rows = [["URL", "Last modified", "Notes"]]
+    ordered = sorted(
+        dom.urls,
+        key=lambda u: (u.lastmod is not None, u.lastmod or date.min),
+        reverse=True,
+    )
+    for u in ordered[:_MAX_INVENTORY_ROWS]:
+        rows.append([u.loc, u.lastmod.isoformat() if u.lastmod else "", ""])
+    extra = len(ordered) - _MAX_INVENTORY_ROWS
+    if extra > 0:
+        rows.append([f"(+{extra} more pages not shown)", "", ""])
+    return rows
+
+
 def _keyword_list_rows(dk: DomainKeywords) -> list[list]:
     """Rows for a single domain's ranked keyword list, sorted by volume desc."""
     rows = [["Keyword", "Volume", "Difficulty", "Position", "URL"]]
@@ -249,6 +269,16 @@ def build_sheet_model(data: JobData, run_date: str | None = None) -> list[SheetT
             for gap in data.sitemap.gaps:
                 rows.append([gap.section, ", ".join(short_domain(d) for d in gap.competitors_with)])
         tabs.append(SheetTab("Sitemap", rows, header=True, number_formats={1: "#,##0"}))
+
+        # --- Per-domain page inventories (one tab per crawled domain) ---
+        for dom in domains:
+            if not dom.urls:
+                continue
+            tabs.append(SheetTab(
+                _sheet_tab_name(f"{short_domain(dom.domain)} — Pages"),
+                _url_inventory_rows(dom),
+                header=True, basic_filter=True,
+            ))
 
     # --- Keywords ---
     # Raw keyword inventories (provided wishlist, client, competitors) come first,

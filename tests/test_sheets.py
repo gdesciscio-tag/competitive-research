@@ -561,6 +561,54 @@ def test_sitemap_tab_flags_unreliable_cadence():
     assert "unreliable" in comp_row[3].lower()              # but flagged
 
 
+def test_sitemap_emits_url_inventory_tabs():
+    from compresearch.models import (
+        JobConfig, JobData, SitemapResult, DomainSitemap, UrlEntry,
+    )
+    from datetime import date
+    cfg = JobConfig(client_name="ATS Hire", client_url="https://atshire.com/",
+                    competitor_urls=["https://bluesignal.com/"])
+    sm = SitemapResult(
+        client=DomainSitemap(domain="https://atshire.com/", urls=[
+            UrlEntry(loc="https://atshire.com/who-we-are/", lastmod=date(2026, 6, 17)),
+            UrlEntry(loc="https://atshire.com/contact/"),                       # undated
+            UrlEntry(loc="https://atshire.com/jobs/", lastmod=date(2026, 6, 20)),
+        ]),
+        competitors=[DomainSitemap(domain="https://bluesignal.com/", urls=[
+            UrlEntry(loc="https://bluesignal.com/about/", lastmod=date(2025, 1, 1))])],
+    )
+    tabs = build_sheet_model(JobData(config=cfg, sitemap=sm))
+    by_name = {t.name: t for t in tabs}
+    assert "atshire.com — Pages" in by_name           # distinct from keyword tab names
+    assert "bluesignal.com — Pages" in by_name
+    pages = by_name["atshire.com — Pages"]
+    assert pages.rows[0] == ["URL", "Last modified", "Notes"]
+    # Newest first, undated last
+    assert [r[0] for r in pages.rows[1:]] == [
+        "https://atshire.com/jobs/",
+        "https://atshire.com/who-we-are/",
+        "https://atshire.com/contact/",
+    ]
+    assert pages.rows[1][1] == "2026-06-20"
+    assert pages.rows[3][1] == ""                      # undated -> blank
+    assert pages.rows[1][2] == ""                      # empty Notes column to annotate
+    # Inventory tabs sit with the sitemap section, before the keyword tabs
+    names = [t.name for t in tabs]
+    assert names.index("Sitemap") < names.index("atshire.com — Pages")
+
+
+def test_url_inventory_truncates_large_domains():
+    from compresearch.models import JobConfig, JobData, SitemapResult, DomainSitemap, UrlEntry
+    from compresearch.sheets import _MAX_INVENTORY_ROWS
+    urls = [UrlEntry(loc=f"https://big.com/{i}") for i in range(_MAX_INVENTORY_ROWS + 50)]
+    sm = SitemapResult(client=DomainSitemap(domain="https://big.com/", urls=urls))
+    tab = next(t for t in build_sheet_model(JobData(
+        config=JobConfig(client_name="Big", client_url="https://big.com/"), sitemap=sm))
+        if t.name == "big.com — Pages")
+    assert len(tab.rows) == 1 + _MAX_INVENTORY_ROWS + 1   # header + cap + truncation row
+    assert "more pages not shown" in tab.rows[-1][0]
+
+
 def test_provided_tab_absent_when_no_provided_keywords():
     from compresearch.models import JobConfig, JobData, KeywordResult
     data = JobData(config=JobConfig(client_name="ATS Hire", client_url="https://atshire.com/"),
