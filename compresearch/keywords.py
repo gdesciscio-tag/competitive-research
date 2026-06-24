@@ -290,6 +290,30 @@ def analyze_keywords(
     )
 
 
+def read_provided_keywords(job_dir: Path) -> list[str]:
+    """Read the operator-supplied client keyword wishlist.
+
+    Source: ``<job_dir>/keywords_input/client_provided.txt`` — one keyword per
+    line. Blank lines and lines starting with '#' are ignored; duplicates are
+    dropped case-insensitively while preserving first-seen order. Returns [] when
+    the file is absent.
+    """
+    path = Path(job_dir) / "keywords_input" / "client_provided.txt"
+    if not path.exists():
+        return []
+    terms: list[str] = []
+    seen: set[str] = set()
+    with open(path, encoding="utf-8-sig") as handle:
+        for line in handle:
+            term = line.strip()
+            if not term or term.startswith("#"):
+                continue
+            if term.lower() not in seen:
+                seen.add(term.lower())
+                terms.append(term)
+    return terms
+
+
 def _provider_for_job(job_dir: Path, config: JobConfig) -> Provider:
     """Select a Provider from the job config: manual CSVs or the DataForSEO API."""
     if config.keyword_source == "manual":

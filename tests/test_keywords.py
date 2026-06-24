@@ -293,6 +293,30 @@ def test_analyze_keywords_partial_competitor_failure_still_yields_gaps(make_prov
     assert any(c.error for c in result.competitors)
 
 
+from compresearch.keywords import read_provided_keywords
+
+
+def test_read_provided_keywords_skips_blanks_comments_and_dedupes(tmp_path):
+    input_dir = tmp_path / "keywords_input"
+    input_dir.mkdir()
+    (input_dir / "client_provided.txt").write_text(
+        "# client wishlist\n"
+        "RF Engineering Recruiter\n"
+        "\n"
+        "Photonics Recruiter\n"
+        "rf engineering recruiter\n",  # duplicate (case-insensitive) — dropped
+        encoding="utf-8",
+    )
+    assert read_provided_keywords(tmp_path) == [
+        "RF Engineering Recruiter",
+        "Photonics Recruiter",
+    ]
+
+
+def test_read_provided_keywords_missing_file_returns_empty(tmp_path):
+    assert read_provided_keywords(tmp_path) == []
+
+
 from compresearch.keywords import parse_keyword_overview
 
 
