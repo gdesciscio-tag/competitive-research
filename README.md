@@ -65,6 +65,14 @@ free crm,800,30,,
 
 Leave a numeric cell blank if unknown. Then run the same command above.
 
+**Client-provided keywords (optional):** to include a "Client-Provided Keywords" tab in
+the Sheet, drop a plain-text file at `jobs\<slug>\keywords_input\client_provided.txt`
+before running — one keyword per line (blank lines and lines starting with `#` are
+ignored). In `api` keyword mode each phrase is enriched with search volume and difficulty
+via DataForSEO and cross-referenced against the client's and competitors' rankings. In
+`manual` mode the tab still renders, with volume/difficulty filled in only where a phrase
+matches the supplied ranking data.
+
 ## Run the topical-map module
 
 The topical map runs on a job that already has sitemap and keyword results (run those
