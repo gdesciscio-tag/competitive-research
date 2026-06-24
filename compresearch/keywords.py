@@ -10,7 +10,7 @@ import httpx
 
 from compresearch.models import (
     KeywordEntry, DomainKeywords, KeywordGap, QuickWin, KeywordResult,
-    JobConfig, JobData,
+    ProvidedKeyword, JobConfig, JobData,
 )
 from compresearch.settings import get_secret
 from compresearch.job_store import load_data, save_data
@@ -39,6 +39,7 @@ def estimate_traffic_value(volume: int | None, position: int | None) -> float | 
 
 
 Provider = Callable[[str], list[KeywordEntry]]
+Enricher = Callable[[list[str]], list[KeywordEntry]]
 
 
 def _domain_key(url: str) -> str:
@@ -288,6 +289,63 @@ def analyze_keywords(
         quick_wins=quick_wins,
         is_partial=is_partial,
     )
+
+
+def analyze_provided_keywords(
+    terms: list[str],
+    client: DomainKeywords | None,
+    competitors: list[DomainKeywords],
+    enricher: Enricher | None = None,
+) -> list[ProvidedKeyword]:
+    """Build ProvidedKeyword rows for the client's wishlist.
+
+    Volume/difficulty come from the enricher (authoritative, covers every term);
+    when the enricher is absent or fails, they fall back to any matching ranked
+    entry. Client/competitor ranks are always cross-referenced from the ranked
+    data already pulled. Enrichment failure is logged, never fatal.
+    """
+    if not terms:
+        return []
+
+    enriched: dict[str, KeywordEntry] = {}
+    if enricher is not None:
+        try:
+            for entry in enricher(terms):
+                enriched[entry.keyword.lower()] = entry
+        except Exception as exc:
+            logging.warning("Provided-keyword enrichment failed: %s", exc)
+
+    client_kw = {e.keyword.lower(): e for e in (client.keywords if client else [])}
+
+    results: list[ProvidedKeyword] = []
+    for term in terms:
+        key = term.lower()
+        comp_domains: list[str] = []
+        best: int | None = None
+        ranked_match: KeywordEntry | None = client_kw.get(key)
+        for comp in competitors:
+            for entry in comp.keywords:
+                if entry.keyword.lower() != key:
+                    continue
+                if comp.domain not in comp_domains:
+                    comp_domains.append(comp.domain)
+                if entry.position is not None and (best is None or entry.position < best):
+                    best = entry.position
+                ranked_match = ranked_match or entry
+                break
+        source = enriched.get(key) or ranked_match
+        client_entry = client_kw.get(key)
+        results.append(
+            ProvidedKeyword(
+                keyword=term,
+                search_volume=(source.search_volume if source else None),
+                difficulty=(source.difficulty if source else None),
+                client_position=(client_entry.position if client_entry else None),
+                competitors_ranking=comp_domains,
+                best_competitor_position=best,
+            )
+        )
+    return results
 
 
 def read_provided_keywords(job_dir: Path) -> list[str]:

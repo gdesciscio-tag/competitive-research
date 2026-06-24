@@ -293,6 +293,76 @@ def test_analyze_keywords_partial_competitor_failure_still_yields_gaps(make_prov
     assert any(c.error for c in result.competitors)
 
 
+from compresearch.keywords import analyze_provided_keywords
+from compresearch.models import KeywordEntry, DomainKeywords
+
+
+def _dk(domain, entries):
+    return DomainKeywords(domain=domain, keywords=entries, total_keywords=len(entries))
+
+
+def test_analyze_provided_keywords_cross_references_and_enriches():
+    client = _dk("atshire.com", [
+        KeywordEntry(keyword="photonics recruiter", search_volume=50, position=7),
+    ])
+    competitors = [
+        _dk("bluesignal.com", [
+            KeywordEntry(keyword="rf engineering recruiter", search_volume=300, position=4),
+        ]),
+        _dk("broadstaffglobal.com", [
+            KeywordEntry(keyword="rf engineering recruiter", search_volume=300, position=9),
+        ]),
+    ]
+
+    def enricher(terms):
+        # Authoritative volume/difficulty for every term, even ones nobody ranks for
+        return [
+            KeywordEntry(keyword="rf engineering recruiter", search_volume=320, difficulty=18),
+            KeywordEntry(keyword="photonics recruiter", search_volume=90, difficulty=12),
+            KeywordEntry(keyword="semiconductor recruiter", search_volume=140, difficulty=22),
+        ]
+
+    result = analyze_provided_keywords(
+        ["RF Engineering Recruiter", "Photonics Recruiter", "Semiconductor Recruiter"],
+        client, competitors, enricher,
+    )
+    by_kw = {p.keyword: p for p in result}
+
+    rf = by_kw["RF Engineering Recruiter"]
+    assert rf.search_volume == 320 and rf.difficulty == 18      # from enrichment
+    assert rf.client_position is None                            # client doesn't rank
+    assert sorted(rf.competitors_ranking) == ["bluesignal.com", "broadstaffglobal.com"]
+    assert rf.best_competitor_position == 4                      # best (lowest) of 4 and 9
+
+    ph = by_kw["Photonics Recruiter"]
+    assert ph.client_position == 7                               # client ranks
+    assert ph.competitors_ranking == []
+
+    semi = by_kw["Semiconductor Recruiter"]
+    assert semi.search_volume == 140                             # enrichment only
+    assert semi.client_position is None and semi.competitors_ranking == []
+
+
+def test_analyze_provided_keywords_without_enricher_falls_back_to_ranked_volume():
+    client = _dk("atshire.com", [])
+    competitors = [_dk("bluesignal.com", [
+        KeywordEntry(keyword="rf engineering recruiter", search_volume=300, position=4),
+    ])]
+    # enricher=None (manual mode / no creds): volume falls back to matched ranked data
+    result = analyze_provided_keywords(["RF Engineering Recruiter"], client, competitors, None)
+    assert result[0].search_volume == 300
+    assert result[0].best_competitor_position == 4
+
+
+def test_analyze_provided_keywords_survives_enricher_error():
+    client = _dk("atshire.com", [])
+    def boom(terms):
+        raise RuntimeError("dataforseo down")
+    result = analyze_provided_keywords(["RF Engineering Recruiter"], client, [], boom)
+    assert len(result) == 1
+    assert result[0].search_volume is None       # enrichment failed, no ranked match
+
+
 from compresearch.keywords import read_provided_keywords
 
 
