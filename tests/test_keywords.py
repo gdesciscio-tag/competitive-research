@@ -291,3 +291,33 @@ def test_analyze_keywords_partial_competitor_failure_still_yields_gaps(make_prov
     assert result.is_partial is True
     assert result.gaps != []  # gaps from the successful competitor still computed
     assert any(c.error for c in result.competitors)
+
+
+from compresearch.keywords import parse_keyword_overview
+
+
+def test_parse_keyword_overview_reads_volume_and_difficulty():
+    payload = {
+        "tasks": [{
+            "result": [{
+                "items": [
+                    {
+                        "keyword": "rf engineering recruiter",
+                        "keyword_info": {"search_volume": 320},
+                        "keyword_properties": {"keyword_difficulty": 18},
+                    },
+                    {
+                        "keyword": "photonics recruiter",
+                        "keyword_info": {"search_volume": 90},
+                        "keyword_properties": {"keyword_difficulty": 12},
+                    },
+                    {"keyword": None},  # skipped — no keyword
+                ]
+            }]
+        }]
+    }
+    entries = parse_keyword_overview(payload)
+    assert [e.keyword for e in entries] == ["rf engineering recruiter", "photonics recruiter"]
+    assert entries[0].search_volume == 320
+    assert entries[0].difficulty == 18
+    assert entries[1].search_volume == 90

@@ -124,6 +124,32 @@ def parse_ranked_keywords(payload: dict) -> list[KeywordEntry]:
     return entries
 
 
+def parse_keyword_overview(payload: dict) -> list[KeywordEntry]:
+    """Parse a DataForSEO Labs keyword_overview/live response into KeywordEntry list.
+
+    keyword_overview items are flatter than ranked_keywords (no `keyword_data`
+    wrapper): the keyword, keyword_info, and keyword_properties sit at the item
+    top level. Items without a keyword are skipped.
+    """
+    entries: list[KeywordEntry] = []
+    for task in payload.get("tasks") or []:
+        for result in task.get("result") or []:
+            for item in result.get("items") or []:
+                keyword = item.get("keyword")
+                if not keyword:
+                    continue
+                info = item.get("keyword_info") or {}
+                props = item.get("keyword_properties") or {}
+                entries.append(
+                    KeywordEntry(
+                        keyword=keyword,
+                        search_volume=info.get("search_volume"),
+                        difficulty=props.get("keyword_difficulty"),
+                    )
+                )
+    return entries
+
+
 DATAFORSEO_RANKED_KEYWORDS_URL = (
     "https://api.dataforseo.com/v3/dataforseo_labs/google/ranked_keywords/live"
 )
