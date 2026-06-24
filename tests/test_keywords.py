@@ -219,7 +219,45 @@ def test_analyze_keywords_marks_partial_and_skips_gaps_on_client_failure(make_pr
 
 from compresearch.keywords import run_keywords
 from compresearch.job_store import create_job, load_data
-from compresearch.models import JobConfig
+from compresearch.models import JobConfig, KeywordEntry
+
+
+def test_run_keywords_populates_provided_from_file(tmp_path, make_provider):
+    cfg = JobConfig(
+        client_name="ATS Hire",
+        client_url="https://atshire.com/",
+        competitor_urls=["https://bluesignal.com/"],
+    )
+    job_dir = create_job(cfg, jobs_dir=tmp_path)
+    input_dir = job_dir / "keywords_input"
+    input_dir.mkdir(exist_ok=True)
+    (input_dir / "client_provided.txt").write_text("RF Engineering Recruiter\n", encoding="utf-8")
+
+    provider = make_provider({
+        "atshire.com": [],
+        "bluesignal.com": [KeywordEntry(keyword="rf engineering recruiter",
+                                        search_volume=300, position=4)],
+    })
+
+    def enricher(terms):
+        return [KeywordEntry(keyword="rf engineering recruiter",
+                             search_volume=320, difficulty=18)]
+
+    run_keywords(job_dir, provider=provider, enricher=enricher)
+    data = load_data(job_dir)
+    assert len(data.keywords.provided) == 1
+    pk = data.keywords.provided[0]
+    assert pk.keyword == "RF Engineering Recruiter"
+    assert pk.search_volume == 320
+    assert pk.competitors_ranking == ["bluesignal.com"]
+
+
+def test_run_keywords_no_provided_file_leaves_provided_empty(tmp_path, make_provider):
+    cfg = JobConfig(client_name="ATS Hire", client_url="https://atshire.com/")
+    job_dir = create_job(cfg, jobs_dir=tmp_path)
+    provider = make_provider({"atshire.com": []})
+    run_keywords(job_dir, provider=provider, enricher=lambda terms: [])
+    assert load_data(job_dir).keywords.provided == []
 
 
 def test_run_keywords_with_injected_provider(tmp_path, make_provider):

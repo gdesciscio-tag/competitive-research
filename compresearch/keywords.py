@@ -349,11 +349,12 @@ def analyze_provided_keywords(
         best: int | None = None
         ranked_match: KeywordEntry | None = client_kw.get(key)
         for comp in competitors:
+            comp_key = _domain_key(comp.domain)
             for entry in comp.keywords:
                 if entry.keyword.lower() != key:
                     continue
-                if comp.domain not in comp_domains:
-                    comp_domains.append(comp.domain)
+                if comp_key not in comp_domains:
+                    comp_domains.append(comp_key)
                 if entry.position is not None and (best is None or entry.position < best):
                     best = entry.position
                 ranked_match = ranked_match or entry
@@ -415,7 +416,11 @@ def _provider_for_job(job_dir: Path, config: JobConfig) -> Provider:
     raise ValueError(f"Unknown keyword_source: {config.keyword_source}")  # pragma: no cover
 
 
-def run_keywords(job_dir: Path, provider: Provider | None = None) -> JobData:
+def run_keywords(
+    job_dir: Path,
+    provider: Provider | None = None,
+    enricher: Enricher | None = None,
+) -> JobData:
     """Run keyword analysis for a job and persist the result to data.json."""
     data = load_data(job_dir)
     if provider is None:
@@ -423,5 +428,17 @@ def run_keywords(job_dir: Path, provider: Provider | None = None) -> JobData:
     data.keywords = analyze_keywords(
         data.config.client_url, data.config.competitor_urls, provider
     )
+
+    terms = read_provided_keywords(Path(job_dir))
+    if terms:
+        if enricher is None and data.config.keyword_source == "api":
+            try:
+                enricher = DataForSEOProvider.from_settings().enrich_keywords
+            except Exception as exc:
+                logging.warning("No enricher available for provided keywords: %s", exc)
+        data.keywords.provided = analyze_provided_keywords(
+            terms, data.keywords.client, data.keywords.competitors, enricher
+        )
+
     save_data(job_dir, data)
     return data
