@@ -227,3 +227,15 @@ def test_draft_export_result_defaults_and_jobdata_field():
 
     data = JobData(config=JobConfig(client_name="X", client_url="https://x.com"))
     assert data.draft_export is None  # field exists, defaults to None
+
+
+def test_provided_keyword_and_result_field_defaults():
+    from compresearch.models import ProvidedKeyword, KeywordResult
+    pk = ProvidedKeyword(keyword="rf engineering recruiter")
+    assert pk.search_volume is None
+    assert pk.difficulty is None
+    assert pk.client_position is None
+    assert pk.competitors_ranking == []
+    assert pk.best_competitor_position is None
+    # KeywordResult gains a `provided` list that defaults to empty
+    assert KeywordResult().provided == []

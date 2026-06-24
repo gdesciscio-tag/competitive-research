@@ -71,11 +71,21 @@ class QuickWin(BaseModel):
     traffic_value: float | None = None
 
 
+class ProvidedKeyword(BaseModel):
+    keyword: str
+    search_volume: int | None = None
+    difficulty: float | None = None
+    client_position: int | None = None
+    competitors_ranking: list[str] = Field(default_factory=list)
+    best_competitor_position: int | None = None
+
+
 class KeywordResult(BaseModel):
     client: DomainKeywords | None = None
     competitors: list[DomainKeywords] = Field(default_factory=list)
     gaps: list[KeywordGap] = Field(default_factory=list)
     quick_wins: list[QuickWin] = Field(default_factory=list)
+    provided: list[ProvidedKeyword] = Field(default_factory=list)
     is_partial: bool = False
 
 
