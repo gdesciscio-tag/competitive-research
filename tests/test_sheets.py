@@ -472,6 +472,19 @@ def test_build_sheet_model_emits_client_and_competitor_keyword_tabs():
     # Sorted by volume descending: photonics jobs (900) before rf recruiter (200)
     assert [r[0] for r in client_tab.rows[1:]] == ["photonics jobs", "rf recruiter"]
 
+    # URL column renders a HYPERLINK formula when present, blank otherwise
+    rf_row = next(r for r in client_tab.rows[1:] if r[0] == "rf recruiter")
+    assert rf_row[4].startswith('=HYPERLINK(') and "atshire.com/rf" in rf_row[4]
+    photonics_row = next(r for r in client_tab.rows[1:] if r[0] == "photonics jobs")
+    assert photonics_row[4] == ""
+
+
+def test_sheet_tab_name_sanitizes_invalid_chars_and_truncates():
+    from compresearch.sheets import _sheet_tab_name
+    assert _sheet_tab_name("a/b:c[d]") == "a b c d"   # forbidden chars -> spaces
+    assert _sheet_tab_name(":::") == "Sheet"           # all-invalid -> fallback
+    assert len(_sheet_tab_name("x" * 150)) == 100      # capped at 100 chars
+
 
 def test_keyword_tabs_skipped_when_lists_empty():
     from compresearch.models import JobConfig, JobData, KeywordResult, DomainKeywords

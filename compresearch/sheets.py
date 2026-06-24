@@ -7,7 +7,7 @@ from datetime import date
 from typing import Callable
 
 from compresearch.job_store import load_data, save_data
-from compresearch.models import Branding, JobData, SheetResult
+from compresearch.models import Branding, DomainKeywords, JobData, SheetResult
 from compresearch.utils import short_domain
 from compresearch.settings import get_secret
 from compresearch.branding import load_branding
@@ -156,10 +156,12 @@ _INVALID_TAB_CHARS = str.maketrans({c: " " for c in ":\\/?*[]"})
 
 
 def _sheet_tab_name(name: str) -> str:
-    return name.translate(_INVALID_TAB_CHARS).strip()[:100] or "Sheet"
+    # Truncate to the 100-char cap first, then strip — otherwise a sanitized
+    # character at position 100 could leave a trailing space after the slice.
+    return name.translate(_INVALID_TAB_CHARS)[:100].strip() or "Sheet"
 
 
-def _keyword_list_rows(dk) -> list[list]:
+def _keyword_list_rows(dk: DomainKeywords) -> list[list]:
     """Rows for a single domain's ranked keyword list, sorted by volume desc."""
     rows = [["Keyword", "Volume", "Difficulty", "Position", "URL"]]
     for e in sorted(dk.keywords, key=lambda k: k.search_volume or 0, reverse=True):
