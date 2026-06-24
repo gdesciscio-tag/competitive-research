@@ -547,3 +547,65 @@ def test_provided_tab_absent_when_no_provided_keywords():
     data = JobData(config=JobConfig(client_name="ATS Hire", client_url="https://atshire.com/"),
                    keywords=KeywordResult())
     assert "Client-Provided Keywords" not in [t.name for t in build_sheet_model(data)]
+
+
+def _keywords_full_for_order():
+    from compresearch.models import (
+        JobConfig, JobData, KeywordResult, DomainKeywords, KeywordEntry,
+        KeywordGap, QuickWin, ProvidedKeyword,
+    )
+    cfg = JobConfig(client_name="ATS Hire", client_url="https://atshire.com/",
+                    competitor_urls=["https://bluesignal.com/"])
+    kw = KeywordResult(
+        client=DomainKeywords(domain="atshire.com", keywords=[
+            KeywordEntry(keyword="rf recruiter", search_volume=200, position=6)]),
+        competitors=[DomainKeywords(domain="bluesignal.com", keywords=[
+            KeywordEntry(keyword="wireless recruiter", search_volume=400, position=3)])],
+        provided=[ProvidedKeyword(keyword="RF Engineering Recruiter", search_volume=320)],
+        gaps=[KeywordGap(keyword="rf jobs", search_volume=500)],
+        quick_wins=[QuickWin(keyword="photonics jobs", position=7, search_volume=300)],
+    )
+    return JobData(config=cfg, keywords=kw)
+
+
+def test_raw_keyword_tabs_precede_analysis_tabs():
+    names = [t.name for t in build_sheet_model(_keywords_full_for_order())]
+    # Raw inventories (provided, client, competitors) come before the analysis tabs
+    assert names.index("Client-Provided Keywords") < names.index("Keyword Gaps")
+    assert names.index("ATS Hire — Keywords") < names.index("Keyword Gaps")
+    assert names.index("bluesignal.com") < names.index("Keyword Gaps")
+    assert names.index("Keyword Gaps") < names.index("Quick Wins")
+
+
+def test_build_sheet_model_sets_banding_and_autoresize_flags():
+    tabs = build_sheet_model(_keywords_full_for_order())
+    by_name = {t.name: t for t in tabs}
+    assert all(t.auto_resize for t in tabs)            # every tab auto-sized
+    assert by_name["Keyword Gaps"].banding is True     # table tabs get stripes
+    assert by_name["Overview"].banding is False        # key/value tab does not
+
+
+def test_build_format_requests_emits_banding_and_autoresize():
+    from compresearch.sheets import build_format_requests, SheetTab
+    from compresearch.models import Branding
+    tab = SheetTab("T", [["h1", "h2"], ["a", "b"], ["c", "d"]],
+                   header=True, banding=True, auto_resize=True)
+    reqs = build_format_requests(tab, sheet_id=7, branding=Branding())
+
+    banding = next(r for r in reqs if "addBanding" in r)
+    rng = banding["addBanding"]["bandedRange"]["range"]
+    assert rng["startRowIndex"] == 1 and rng["endRowIndex"] == 3   # data rows only
+    props = banding["addBanding"]["bandedRange"]["rowProperties"]
+    assert props["firstBandColor"] == {"red": 1.0, "green": 1.0, "blue": 1.0}
+
+    resize = next(r for r in reqs if "autoResizeDimensions" in r)
+    assert resize["autoResizeDimensions"]["dimensions"]["dimension"] == "COLUMNS"
+
+
+def test_build_format_requests_omits_banding_and_autoresize_by_default():
+    from compresearch.sheets import build_format_requests, SheetTab
+    from compresearch.models import Branding
+    tab = SheetTab("T", [["h1", "h2"], ["a", "b"]], header=True)  # flags default False
+    reqs = build_format_requests(tab, sheet_id=7, branding=Branding())
+    assert not any("addBanding" in r for r in reqs)
+    assert not any("autoResizeDimensions" in r for r in reqs)

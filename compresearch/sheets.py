@@ -34,6 +34,8 @@ class SheetTab:
     basic_filter: bool = False
     tab_color: bool = False
     title_block: "TitleBlock | None" = None
+    banding: bool = False       # alternating row stripes on the data rows
+    auto_resize: bool = False   # size columns to fit their content
 
 
 def _cell(value):
@@ -64,6 +66,8 @@ def _safe_value(cell):
 # Fixed semantic heatmap endpoints (not brand colors).
 _GREEN = {"red": 0.42, "green": 0.66, "blue": 0.31}
 _RED = {"red": 0.85, "green": 0.33, "blue": 0.31}
+_WHITE = {"red": 1.0, "green": 1.0, "blue": 1.0}
+_BAND_GRAY = {"red": 0.953, "green": 0.957, "blue": 0.965}  # ~#F3F4F6, subtle stripe
 
 
 def _hex_to_rgb(hex_color: str) -> dict:
@@ -158,6 +162,22 @@ def build_format_requests(tab: "SheetTab", sheet_id: int, branding: Branding) ->
             "fields": "userEnteredFormat.textFormat",
         }})
 
+    # Alternating row stripes on the data rows (header row keeps its brand fill).
+    if tab.banding and n_rows > 1:
+        requests.append({"addBanding": {"bandedRange": {
+            "range": {"sheetId": sheet_id, "startRowIndex": 1, "endRowIndex": n_rows,
+                      "startColumnIndex": 0, "endColumnIndex": n_cols},
+            "rowProperties": {"firstBandColor": _WHITE, "secondBandColor": _BAND_GRAY},
+        }}})
+
+    # Size columns to their content. Appended last so it accounts for the bold
+    # header and any other width-affecting formatting above.
+    if tab.auto_resize and n_cols > 0:
+        requests.append({"autoResizeDimensions": {"dimensions": {
+            "sheetId": sheet_id, "dimension": "COLUMNS",
+            "startIndex": 0, "endIndex": n_cols,
+        }}})
+
     return requests
 
 
@@ -224,36 +244,9 @@ def build_sheet_model(data: JobData, run_date: str | None = None) -> list[SheetT
         tabs.append(SheetTab("Sitemap", rows, header=True, number_formats={1: "#,##0"}))
 
     # --- Keywords ---
+    # Raw keyword inventories (provided wishlist, client, competitors) come first,
+    # then the derived analysis tabs (gaps, quick wins).
     if data.keywords is not None:
-        gap_rows = [["Keyword", "Volume", "Difficulty", "Best competitor rank",
-                     "Est. traffic value", "Competitors"]]
-        for g in data.keywords.gaps:
-            gap_rows.append([
-                g.keyword, _cell(g.search_volume), _cell(g.difficulty),
-                _cell(g.best_competitor_position), _cell(g.traffic_value),
-                ", ".join(short_domain(d) for d in g.competitors_ranking),
-            ])
-        tabs.append(SheetTab(
-            "Keyword Gaps", gap_rows, header=True, basic_filter=True,
-            number_formats={1: "#,##0", 2: "0", 3: "0", 4: "$#,##0"},
-            color_scales=[ColorScale(2, "low_good")],
-        ))
-
-        win_rows = [["Keyword", "Current position", "Volume", "Est. traffic value", "URL"]]
-        for w in data.keywords.quick_wins:
-            if w.url:
-                safe_url = w.url.replace('"', "%22")
-                url_cell = f'=HYPERLINK("{safe_url}", "{safe_url}")'
-            else:
-                url_cell = ""
-            win_rows.append([w.keyword, w.position, _cell(w.search_volume),
-                             _cell(w.traffic_value), url_cell])
-        tabs.append(SheetTab(
-            "Quick Wins", win_rows, header=True, basic_filter=True,
-            number_formats={1: "0", 2: "#,##0", 3: "$#,##0"},
-            color_scales=[ColorScale(1, "low_good")],
-        ))
-
         # --- Client-provided keyword wishlist (only when supplied) ---
         if data.keywords.provided:
             prov_rows = [["Keyword", "Volume", "Difficulty", "Client rank",
@@ -290,6 +283,37 @@ def build_sheet_model(data: JobData, run_date: str | None = None) -> list[SheetT
                 number_formats={1: "#,##0", 2: "0", 3: "0"},
             ))
 
+        # --- Keyword gaps (analysis) ---
+        gap_rows = [["Keyword", "Volume", "Difficulty", "Best competitor rank",
+                     "Est. traffic value", "Competitors"]]
+        for g in data.keywords.gaps:
+            gap_rows.append([
+                g.keyword, _cell(g.search_volume), _cell(g.difficulty),
+                _cell(g.best_competitor_position), _cell(g.traffic_value),
+                ", ".join(short_domain(d) for d in g.competitors_ranking),
+            ])
+        tabs.append(SheetTab(
+            "Keyword Gaps", gap_rows, header=True, basic_filter=True,
+            number_formats={1: "#,##0", 2: "0", 3: "0", 4: "$#,##0"},
+            color_scales=[ColorScale(2, "low_good")],
+        ))
+
+        # --- Quick wins (analysis) ---
+        win_rows = [["Keyword", "Current position", "Volume", "Est. traffic value", "URL"]]
+        for w in data.keywords.quick_wins:
+            if w.url:
+                safe_url = w.url.replace('"', "%22")
+                url_cell = f'=HYPERLINK("{safe_url}", "{safe_url}")'
+            else:
+                url_cell = ""
+            win_rows.append([w.keyword, w.position, _cell(w.search_volume),
+                             _cell(w.traffic_value), url_cell])
+        tabs.append(SheetTab(
+            "Quick Wins", win_rows, header=True, basic_filter=True,
+            number_formats={1: "0", 2: "#,##0", 3: "$#,##0"},
+            color_scales=[ColorScale(1, "low_good")],
+        ))
+
     # --- Topical map ---
     if data.topical_map is not None and data.topical_map.map is not None:
         rows = [["Pillar", "Cluster", "Article", "Target keyword", "Intent", "Est. volume"]]
@@ -318,6 +342,13 @@ def build_sheet_model(data: JobData, run_date: str | None = None) -> list[SheetT
             safe_url = doc_url.replace('"', "%22")
             rows.append(["Document", f'=HYPERLINK("{safe_url}", "Open draft")'])
         tabs.append(SheetTab("Draft Post", rows))
+
+    # Polish applied uniformly: auto-size every tab's columns, and stripe the
+    # data rows of the table tabs (those with a header row).
+    for tab in tabs:
+        tab.auto_resize = True
+        if tab.header:
+            tab.banding = True
 
     return tabs
 
