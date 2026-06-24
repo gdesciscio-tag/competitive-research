@@ -242,6 +242,22 @@ def build_sheet_model(data: JobData, run_date: str | None = None) -> list[SheetT
             color_scales=[ColorScale(1, "low_good")],
         ))
 
+        # --- Client-provided keyword wishlist (only when supplied) ---
+        if data.keywords.provided:
+            prov_rows = [["Keyword", "Volume", "Difficulty", "Client rank",
+                          "Competitors ranking", "Best competitor rank"]]
+            for p in data.keywords.provided:
+                prov_rows.append([
+                    p.keyword, _cell(p.search_volume), _cell(p.difficulty),
+                    _cell(p.client_position),
+                    ", ".join(short_domain(d) for d in p.competitors_ranking),
+                    _cell(p.best_competitor_position),
+                ])
+            tabs.append(SheetTab(
+                "Client-Provided Keywords", prov_rows, header=True, basic_filter=True,
+                number_formats={1: "#,##0", 2: "0", 3: "0", 5: "0"},
+            ))
+
         # --- Client's own ranked keywords ---
         if data.keywords.client is not None and data.keywords.client.keywords:
             tabs.append(SheetTab(

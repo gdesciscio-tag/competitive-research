@@ -483,3 +483,34 @@ def test_keyword_tabs_skipped_when_lists_empty():
     names = [t.name for t in build_sheet_model(data)]
     assert "ATS Hire — Keywords" not in names
     assert "bluesignal.com" not in names
+
+
+def test_build_sheet_model_emits_provided_keywords_tab():
+    from compresearch.models import (
+        JobConfig, JobData, KeywordResult, DomainKeywords, ProvidedKeyword,
+    )
+    cfg = JobConfig(client_name="ATS Hire", client_url="https://atshire.com/")
+    data = JobData(config=cfg, keywords=KeywordResult(
+        client=DomainKeywords(domain="atshire.com", keywords=[]),
+        provided=[
+            ProvidedKeyword(
+                keyword="RF Engineering Recruiter", search_volume=320, difficulty=18,
+                client_position=None, competitors_ranking=["bluesignal.com"],
+                best_competitor_position=4,
+            ),
+        ],
+    ))
+    tabs = build_sheet_model(data)
+    by_name = {t.name: t for t in tabs}
+    assert "Client-Provided Keywords" in by_name
+    tab = by_name["Client-Provided Keywords"]
+    assert tab.rows[0] == ["Keyword", "Volume", "Difficulty", "Client rank",
+                           "Competitors ranking", "Best competitor rank"]
+    assert tab.rows[1] == ["RF Engineering Recruiter", 320, 18, "", "bluesignal.com", 4]
+
+
+def test_provided_tab_absent_when_no_provided_keywords():
+    from compresearch.models import JobConfig, JobData, KeywordResult
+    data = JobData(config=JobConfig(client_name="ATS Hire", client_url="https://atshire.com/"),
+                   keywords=KeywordResult())
+    assert "Client-Provided Keywords" not in [t.name for t in build_sheet_model(data)]
