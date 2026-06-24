@@ -151,6 +151,28 @@ def build_format_requests(tab: "SheetTab", sheet_id: int, branding: Branding) ->
     return requests
 
 
+# Google Sheets tab names cannot contain these characters and cap at 100 chars.
+_INVALID_TAB_CHARS = str.maketrans({c: " " for c in ":\\/?*[]"})
+
+
+def _sheet_tab_name(name: str) -> str:
+    return name.translate(_INVALID_TAB_CHARS).strip()[:100] or "Sheet"
+
+
+def _keyword_list_rows(dk) -> list[list]:
+    """Rows for a single domain's ranked keyword list, sorted by volume desc."""
+    rows = [["Keyword", "Volume", "Difficulty", "Position", "URL"]]
+    for e in sorted(dk.keywords, key=lambda k: k.search_volume or 0, reverse=True):
+        if e.url:
+            safe_url = e.url.replace('"', "%22")
+            url_cell = f'=HYPERLINK("{safe_url}", "{safe_url}")'
+        else:
+            url_cell = ""
+        rows.append([e.keyword, _cell(e.search_volume), _cell(e.difficulty),
+                     _cell(e.position), url_cell])
+    return rows
+
+
 def build_sheet_model(data: JobData, run_date: str | None = None) -> list[SheetTab]:
     """Turn a finished JobData into a list of sheet tabs (name + rows + formatting metadata).
     Pure; only emits a tab for an analysis section that is present."""
@@ -219,6 +241,26 @@ def build_sheet_model(data: JobData, run_date: str | None = None) -> list[SheetT
             number_formats={1: "0", 2: "#,##0", 3: "$#,##0"},
             color_scales=[ColorScale(1, "low_good")],
         ))
+
+        # --- Client's own ranked keywords ---
+        if data.keywords.client is not None and data.keywords.client.keywords:
+            tabs.append(SheetTab(
+                _sheet_tab_name(f"{config.client_name} — Keywords"),
+                _keyword_list_rows(data.keywords.client),
+                header=True, basic_filter=True,
+                number_formats={1: "#,##0", 2: "0", 3: "0"},
+            ))
+
+        # --- One tab per competitor ---
+        for comp in data.keywords.competitors:
+            if not comp.keywords:
+                continue
+            tabs.append(SheetTab(
+                _sheet_tab_name(short_domain(comp.domain)),
+                _keyword_list_rows(comp),
+                header=True, basic_filter=True,
+                number_formats={1: "#,##0", 2: "0", 3: "0"},
+            ))
 
     # --- Topical map ---
     if data.topical_map is not None and data.topical_map.map is not None:

@@ -436,3 +436,50 @@ def test_writer_formatting_failure_still_returns_url():
     tabs = build_sheet_model(_full_jobdata(), run_date="2026-06-23")
     url = writer("Acme — Competitive Research", tabs)   # must NOT raise
     assert url.endswith("FAKE")
+
+
+def _keywords_with_lists():
+    from compresearch.models import JobConfig, JobData, KeywordResult, DomainKeywords, KeywordEntry
+    cfg = JobConfig(
+        client_name="ATS Hire",
+        client_url="https://atshire.com/",
+        competitor_urls=["https://bluesignal.com/"],
+    )
+    kw = KeywordResult(
+        client=DomainKeywords(domain="atshire.com", keywords=[
+            KeywordEntry(keyword="rf recruiter", search_volume=200, difficulty=20, position=6,
+                         url="https://atshire.com/rf"),
+            KeywordEntry(keyword="photonics jobs", search_volume=900, difficulty=30, position=12),
+        ]),
+        competitors=[DomainKeywords(domain="bluesignal.com", keywords=[
+            KeywordEntry(keyword="wireless recruiter", search_volume=400, difficulty=25, position=3),
+        ])],
+    )
+    return JobData(config=cfg, keywords=kw)
+
+
+def test_build_sheet_model_emits_client_and_competitor_keyword_tabs():
+    tabs = build_sheet_model(_keywords_with_lists())
+    names = [t.name for t in tabs]
+    assert "ATS Hire — Keywords" in names
+    assert "bluesignal.com" in names
+    # Order: client tab precedes competitor tabs; both precede Topical Map / Draft Post
+    assert names.index("ATS Hire — Keywords") < names.index("bluesignal.com")
+
+    by_name = {t.name: t for t in tabs}
+    client_tab = by_name["ATS Hire — Keywords"]
+    assert client_tab.rows[0] == ["Keyword", "Volume", "Difficulty", "Position", "URL"]
+    # Sorted by volume descending: photonics jobs (900) before rf recruiter (200)
+    assert [r[0] for r in client_tab.rows[1:]] == ["photonics jobs", "rf recruiter"]
+
+
+def test_keyword_tabs_skipped_when_lists_empty():
+    from compresearch.models import JobConfig, JobData, KeywordResult, DomainKeywords
+    cfg = JobConfig(client_name="ATS Hire", client_url="https://atshire.com/")
+    data = JobData(config=cfg, keywords=KeywordResult(
+        client=DomainKeywords(domain="atshire.com", keywords=[]),
+        competitors=[DomainKeywords(domain="bluesignal.com", keywords=[])],
+    ))
+    names = [t.name for t in build_sheet_model(data)]
+    assert "ATS Hire — Keywords" not in names
+    assert "bluesignal.com" not in names
