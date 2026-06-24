@@ -144,6 +144,37 @@ def test_find_gaps_excludes_cms_taxonomy():
     assert "category" not in sections and "tag" not in sections and "colio_item" not in sections
 
 
+def test_is_content_section_filters_dates_and_locales():
+    from compresearch.sitemap import _is_content_section
+    for drop in ("2016", "2024", "2026", "en", "fr", "en-gb", "fr-ca", "en-in", "zh-cn"):
+        assert _is_content_section(drop) is False, drop
+    # Short, non-locale segments are real content (e.g. an AI or RF practice area).
+    for keep in ("ai", "rf", "5g", "candidates", "services"):
+        assert _is_content_section(keep) is True, keep
+
+
+def test_find_gaps_canonicalizes_synonymous_sections():
+    from compresearch.sitemap import _find_gaps
+    from compresearch.models import DomainSitemap
+    # Client lists jobs under /all-jobs/; competitor under /job/ — same thing, not a gap.
+    client = DomainSitemap(domain="https://atshire.com", section_counts={"all-jobs": 33})
+    rival = DomainSitemap(domain="https://rival.com",
+                          section_counts={"job": 173, "candidates": 5})
+    sections = [g.section for g in _find_gaps(client, [rival])]
+    assert "job" not in sections and "jobs" not in sections   # synonymous -> covered
+    assert "candidates" in sections                           # real gap remains
+
+
+def test_find_gaps_excludes_dates_and_locales():
+    from compresearch.sitemap import _find_gaps
+    from compresearch.models import DomainSitemap
+    client = DomainSitemap(domain="https://atshire.com", section_counts={"all-jobs": 1})
+    rival = DomainSitemap(domain="https://rival.com",
+                          section_counts={"2024": 50, "en-gb": 400, "en": 783, "services": 7})
+    sections = [g.section for g in _find_gaps(client, [rival])]
+    assert sections == ["services"]
+
+
 from compresearch.sitemap import infer_cadence
 
 

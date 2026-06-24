@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import gzip
 import logging
+import re
 from datetime import date
 from pathlib import Path
 from typing import Callable
@@ -187,9 +188,31 @@ _NON_CONTENT_PREFIXES = ("colio", "elementor", "wp-")
 _NON_CONTENT_SUFFIXES = ("-categories", "-category", "_category", "_categories",
                          "_tag", "_group", "_item")
 
+# Bare language roots (/en/, /fr/) — kept as an allowlist so genuine 2-letter
+# content sections like /ai/ or /rf/ are NOT mistaken for locales.
+_LANG_CODES = {
+    "en", "fr", "de", "es", "it", "pt", "nl", "ja", "zh", "ko", "ru", "ar",
+    "sv", "da", "no", "fi", "pl", "tr", "hi", "cs", "el", "he", "th", "vi", "id",
+}
+_LOCALE_HYPHEN = re.compile(r"^[a-z]{2}-[a-z]{2,3}$")   # en-gb, fr-ca, en-in, zh-cn
+_NUMERIC = re.compile(r"^\d+$")                          # /2024/ date archives, numeric IDs
+
+# Structurally-different sections that mean the same thing. Folding them lets a
+# client's /all-jobs/ cover a competitor's /job/ instead of reading as a gap.
+_SECTION_SYNONYMS = {
+    "job": "jobs", "jobs": "jobs", "all-jobs": "jobs", "job_type": "jobs",
+    "career": "jobs", "careers": "jobs", "opening": "jobs", "openings": "jobs",
+    "position": "jobs", "positions": "jobs", "open-roles": "jobs", "roles": "jobs",
+    "service": "services", "services": "services",
+    "about": "about", "about-us": "about", "who-we-are": "about",
+    "contact": "contact", "contact-us": "contact",
+    "blog": "blog", "news": "blog", "insights": "blog", "articles": "blog",
+}
+
 
 def _is_content_section(name: str) -> bool:
-    """True if a section name looks like real content (not a CMS taxonomy/system path)."""
+    """True if a section name looks like real content (not a CMS taxonomy/system path,
+    a date archive, or an i18n locale subpath)."""
     lowered = name.lower()
     if lowered in _NON_CONTENT_SECTIONS:
         return False
@@ -197,7 +220,18 @@ def _is_content_section(name: str) -> bool:
         return False
     if lowered.endswith(_NON_CONTENT_SUFFIXES):
         return False
+    if _NUMERIC.match(lowered):           # date archives (/2024/) and numeric IDs
+        return False
+    if _LOCALE_HYPHEN.match(lowered):     # locale subpaths (/en-gb/, /fr-ca/)
+        return False
+    if lowered in _LANG_CODES:            # bare language roots (/en/, /fr/)
+        return False
     return True
+
+
+def _canonical_section(name: str) -> str:
+    """Map a section name to its semantic label so synonymous sections compare equal."""
+    return _SECTION_SYNONYMS.get(name.lower(), name.lower())
 
 
 def _find_gaps(
@@ -210,23 +244,27 @@ def _find_gaps(
     """
     if client.error:
         return []
-    competitor_sections: dict[str, list[str]] = {}
+    client_canon = {
+        _canonical_section(s) for s in client.section_counts if _is_content_section(s)
+    }
+    aggregated: dict[str, SitemapGap] = {}
     for comp in competitors:
         for section in comp.section_counts:
             if not _is_content_section(section):
                 continue
-            competitor_sections.setdefault(section, []).append(comp.domain)
+            canon = _canonical_section(section)
+            if canon in client_canon:
+                continue
+            gap = aggregated.get(canon)
+            if gap is None:
+                gap = SitemapGap(section=canon, competitors_with=[], client_count=0)
+                aggregated[canon] = gap
+            if comp.domain not in gap.competitors_with:
+                gap.competitors_with.append(comp.domain)
 
-    gaps: list[SitemapGap] = []
-    for section, domains in competitor_sections.items():
-        if client.section_counts.get(section, 0) == 0:
-            gaps.append(
-                SitemapGap(
-                    section=section,
-                    competitors_with=sorted(set(domains)),
-                    client_count=0,
-                )
-            )
+    gaps = list(aggregated.values())
+    for gap in gaps:
+        gap.competitors_with.sort()
     gaps.sort(key=lambda g: len(g.competitors_with), reverse=True)
     return gaps
 
