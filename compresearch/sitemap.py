@@ -142,6 +142,21 @@ def infer_cadence(urls: list[UrlEntry]) -> float | None:
     return round(len(dates) / months, 1)
 
 
+# A real site's content history fits comfortably inside this window; a longer
+# implied span means a garbage lastmod (e.g. 0001-01-01) is distorting the estimate.
+_MAX_PLAUSIBLE_SPAN_YEARS = 25
+
+
+def _cadence_is_reliable(urls: list[UrlEntry]) -> bool:
+    """Whether posts_per_month can be trusted: enough dated pages, and a plausible
+    span (an outlier date like year 1 inflates the span and collapses the rate)."""
+    dates = sorted(e.lastmod for e in urls if e.lastmod)
+    if len(dates) < 3:
+        return False
+    span_years = (dates[-1] - dates[0]).days / 365.25
+    return span_years <= _MAX_PLAUSIBLE_SPAN_YEARS
+
+
 def analyze_domain(domain_url: str, fetch: Fetcher) -> DomainSitemap:
     """Discover, fetch, parse, and summarize one domain's sitemap content.
 
@@ -172,6 +187,8 @@ def analyze_domain(domain_url: str, fetch: Fetcher) -> DomainSitemap:
         section_counts=categorize_urls(deduped),
         total_urls=len(deduped),
         posts_per_month=infer_cadence(deduped),
+        dated_urls=sum(1 for e in deduped if e.lastmod),
+        posts_per_month_reliable=_cadence_is_reliable(deduped),
         error=error,
     )
 

@@ -194,6 +194,26 @@ def test_infer_cadence_needs_two_dates():
     assert infer_cadence([UrlEntry(loc="a")]) is None
 
 
+def test_cadence_reliability():
+    from compresearch.sitemap import _cadence_is_reliable
+    # Normal multi-year span across enough dated pages -> reliable
+    good = [UrlEntry(loc=str(i), lastmod=date(2024 + i % 2, 1 + i % 9, 1)) for i in range(6)]
+    assert _cadence_is_reliable(good) is True
+    # Fewer than 3 dated pages -> unreliable
+    assert _cadence_is_reliable(good[:2]) is False
+    # A garbage outlier date (year 1) inflates the span -> unreliable
+    outlier = good + [UrlEntry(loc="x", lastmod=date(1, 1, 1))]
+    assert _cadence_is_reliable(outlier) is False
+
+
+def test_analyze_domain_populates_cadence_reliability(make_fetch, urlset):
+    fetch = make_fetch({"https://acme.com/sitemap.xml": urlset})
+    result = analyze_domain("https://acme.com", fetch)
+    # urlset has 2 of 3 URLs dated; <3 dated -> flagged unreliable
+    assert result.dated_urls == 2
+    assert result.posts_per_month_reliable is False
+
+
 from compresearch.sitemap import analyze_domain
 
 

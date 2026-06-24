@@ -23,6 +23,8 @@ class DomainSitemap(BaseModel):
     section_counts: dict[str, int] = Field(default_factory=dict)
     total_urls: int = 0
     posts_per_month: float | None = None
+    dated_urls: int = 0                      # URLs carrying a lastmod date
+    posts_per_month_reliable: bool = True    # False when too few / implausible dates
     error: str | None = None
 
 

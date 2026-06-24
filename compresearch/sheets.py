@@ -53,6 +53,13 @@ def _provided_cell(value):
     return _NO_DATA if value is None or value == "" else value
 
 
+def _cadence_note(dom) -> str:
+    """Flag a posts/month figure that can't be trusted (too few or outlier dates)."""
+    if dom.posts_per_month is not None and not dom.posts_per_month_reliable:
+        return "estimate unreliable — sparse or outlier publish dates"
+    return ""
+
+
 def _safe_value(cell):
     """Neutralize accidental formula injection. Values are written with USER_ENTERED
     (raw=False) so that intended =HYPERLINK formulas evaluate; that also means a text cell
@@ -231,12 +238,12 @@ def build_sheet_model(data: JobData, run_date: str | None = None) -> list[SheetT
 
     # --- Sitemap ---
     if data.sitemap is not None:
-        rows = [["Site", "Total pages", "Posts/month"]]
-        if data.sitemap.client is not None:
-            c = data.sitemap.client
-            rows.append([short_domain(c.domain), c.total_urls, _cell(c.posts_per_month)])
-        for comp in data.sitemap.competitors:
-            rows.append([short_domain(comp.domain), comp.total_urls, _cell(comp.posts_per_month)])
+        rows = [["Site", "Total pages", "Posts/month", "Note"]]
+        domains = ([data.sitemap.client] if data.sitemap.client is not None else []) \
+            + list(data.sitemap.competitors)
+        for dom in domains:
+            rows.append([short_domain(dom.domain), dom.total_urls,
+                         _cell(dom.posts_per_month), _cadence_note(dom)])
         if data.sitemap.gaps:
             rows += [[], ["Content gaps"], ["Section", "Competitors with it"]]
             for gap in data.sitemap.gaps:

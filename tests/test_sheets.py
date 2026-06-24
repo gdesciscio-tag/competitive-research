@@ -542,6 +542,25 @@ def test_provided_tab_renders_em_dash_for_missing_data():
     assert tab.rows[2] == ["Semiconductor Recruiter", 110, 0, "—", "—", "—"]
 
 
+def test_sitemap_tab_flags_unreliable_cadence():
+    from compresearch.models import JobConfig, JobData, SitemapResult, DomainSitemap
+    cfg = JobConfig(client_name="ATS Hire", client_url="https://atshire.com/")
+    sm = SitemapResult(
+        client=DomainSitemap(domain="https://atshire.com/", total_urls=111,
+                             posts_per_month=1.2, posts_per_month_reliable=True),
+        competitors=[DomainSitemap(domain="https://actalentservices.com/", total_urls=2081,
+                                   posts_per_month=0.1, posts_per_month_reliable=False)],
+    )
+    tab = next(t for t in build_sheet_model(JobData(config=cfg, sitemap=sm))
+               if t.name == "Sitemap")
+    assert tab.rows[0] == ["Site", "Total pages", "Posts/month", "Note"]
+    client_row = next(r for r in tab.rows[1:] if r and r[0] == "atshire.com")
+    assert client_row[3] == ""                              # reliable -> no flag
+    comp_row = next(r for r in tab.rows[1:] if r and r[0] == "actalentservices.com")
+    assert comp_row[2] == 0.1                               # figure is kept
+    assert "unreliable" in comp_row[3].lower()              # but flagged
+
+
 def test_provided_tab_absent_when_no_provided_keywords():
     from compresearch.models import JobConfig, JobData, KeywordResult
     data = JobData(config=JobConfig(client_name="ATS Hire", client_url="https://atshire.com/"),
