@@ -256,7 +256,11 @@ def test_run_keywords_no_provided_file_leaves_provided_empty(tmp_path, make_prov
     cfg = JobConfig(client_name="ATS Hire", client_url="https://atshire.com/")
     job_dir = create_job(cfg, jobs_dir=tmp_path)
     provider = make_provider({"atshire.com": []})
-    run_keywords(job_dir, provider=provider, enricher=lambda terms: [])
+
+    def enricher(terms):
+        raise AssertionError("enricher must not be called when no wishlist file exists")
+
+    run_keywords(job_dir, provider=provider, enricher=enricher)
     assert load_data(job_dir).keywords.provided == []
 
 

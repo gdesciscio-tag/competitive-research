@@ -431,6 +431,8 @@ def run_keywords(
 
     terms = read_provided_keywords(Path(job_dir))
     if terms:
+        # An injected enricher is always honoured; we only auto-build one for the
+        # api source (manual jobs have no DataForSEO credentials to enrich with).
         if enricher is None and data.config.keyword_source == "api":
             try:
                 enricher = DataForSEOProvider.from_settings().enrich_keywords
