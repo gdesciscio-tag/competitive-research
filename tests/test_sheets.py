@@ -519,7 +519,27 @@ def test_build_sheet_model_emits_provided_keywords_tab():
     tab = by_name["Client-Provided Keywords"]
     assert tab.rows[0] == ["Keyword", "Volume", "Difficulty", "Client rank",
                            "Competitors ranking", "Best competitor rank"]
-    assert tab.rows[1] == ["RF Engineering Recruiter", 320, 18, "", "bluesignal.com", 4]
+    # Absent values render as an em dash ("no data"), real values pass through.
+    assert tab.rows[1] == ["RF Engineering Recruiter", 320, 18, "—", "bluesignal.com", 4]
+
+
+def test_provided_tab_renders_em_dash_for_missing_data():
+    from compresearch.models import (
+        JobConfig, JobData, KeywordResult, DomainKeywords, ProvidedKeyword,
+    )
+    cfg = JobConfig(client_name="ATS Hire", client_url="https://atshire.com/")
+    data = JobData(config=cfg, keywords=KeywordResult(
+        client=DomainKeywords(domain="atshire.com", keywords=[]),
+        provided=[
+            # No DataForSEO volume and nobody ranks — every metric absent
+            ProvidedKeyword(keyword="RF Engineering Recruiter"),
+            # A real difficulty of 0 must be kept, not turned into a dash
+            ProvidedKeyword(keyword="Semiconductor Recruiter", search_volume=110, difficulty=0),
+        ],
+    ))
+    tab = next(t for t in build_sheet_model(data) if t.name == "Client-Provided Keywords")
+    assert tab.rows[1] == ["RF Engineering Recruiter", "—", "—", "—", "—", "—"]
+    assert tab.rows[2] == ["Semiconductor Recruiter", 110, 0, "—", "—", "—"]
 
 
 def test_provided_tab_absent_when_no_provided_keywords():

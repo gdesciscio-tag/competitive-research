@@ -41,6 +41,16 @@ def _cell(value):
     return "" if value is None else value
 
 
+_NO_DATA = "—"
+
+
+def _provided_cell(value):
+    """Client-provided-keyword tab cells: render an em dash for absent data, so a
+    blank (no DataForSEO volume, or nobody ranking) reads as 'no data' rather than
+    a failure. Real zeros (e.g. difficulty 0) are preserved."""
+    return _NO_DATA if value is None or value == "" else value
+
+
 def _safe_value(cell):
     """Neutralize accidental formula injection. Values are written with USER_ENTERED
     (raw=False) so that intended =HYPERLINK formulas evaluate; that also means a text cell
@@ -249,11 +259,11 @@ def build_sheet_model(data: JobData, run_date: str | None = None) -> list[SheetT
             prov_rows = [["Keyword", "Volume", "Difficulty", "Client rank",
                           "Competitors ranking", "Best competitor rank"]]
             for p in data.keywords.provided:
+                comps = ", ".join(short_domain(d) for d in p.competitors_ranking)
                 prov_rows.append([
-                    p.keyword, _cell(p.search_volume), _cell(p.difficulty),
-                    _cell(p.client_position),
-                    ", ".join(short_domain(d) for d in p.competitors_ranking),
-                    _cell(p.best_competitor_position),
+                    p.keyword, _provided_cell(p.search_volume), _provided_cell(p.difficulty),
+                    _provided_cell(p.client_position), _provided_cell(comps),
+                    _provided_cell(p.best_competitor_position),
                 ])
             tabs.append(SheetTab(
                 "Client-Provided Keywords", prov_rows, header=True, basic_filter=True,
