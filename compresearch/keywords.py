@@ -154,6 +154,9 @@ def parse_keyword_overview(payload: dict) -> list[KeywordEntry]:
 DATAFORSEO_RANKED_KEYWORDS_URL = (
     "https://api.dataforseo.com/v3/dataforseo_labs/google/ranked_keywords/live"
 )
+DATAFORSEO_KEYWORD_OVERVIEW_URL = (
+    "https://api.dataforseo.com/v3/dataforseo_labs/google/keyword_overview/live"
+)
 
 
 class DataForSEOProvider:
@@ -171,6 +174,7 @@ class DataForSEOProvider:
         language_name: str = "English",
         limit: int = 200,   # ranked keywords pulled per domain (caps DataForSEO cost)
         raw_fetch: Callable[[str], dict] | None = None,
+        raw_enrich: Callable[[list[str]], dict] | None = None,
     ) -> None:
         self._login = login
         self._password = password
@@ -178,6 +182,7 @@ class DataForSEOProvider:
         self._language_name = language_name
         self._limit = limit
         self._raw_fetch = raw_fetch or self._http_fetch
+        self._raw_enrich = raw_enrich or self._http_enrich
 
     def _http_fetch(self, domain_key: str) -> dict:
         resp = httpx.post(
@@ -193,6 +198,26 @@ class DataForSEOProvider:
         )
         resp.raise_for_status()
         return resp.json()
+
+    def _http_enrich(self, keywords: list[str]) -> dict:
+        resp = httpx.post(
+            DATAFORSEO_KEYWORD_OVERVIEW_URL,
+            auth=(self._login, self._password),
+            json=[{
+                "keywords": keywords,
+                "location_code": self._location_code,
+                "language_name": self._language_name,
+            }],
+            timeout=120.0,
+        )
+        resp.raise_for_status()
+        return resp.json()
+
+    def enrich_keywords(self, keywords: list[str]) -> list[KeywordEntry]:
+        """Look up volume + difficulty for arbitrary keywords (one batched call)."""
+        if not keywords:
+            return []
+        return parse_keyword_overview(self._raw_enrich(keywords))
 
     def __call__(self, domain: str) -> list[KeywordEntry]:
         return parse_ranked_keywords(self._raw_fetch(_domain_key(domain)))

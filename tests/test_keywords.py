@@ -146,6 +146,37 @@ def test_dataforseo_provider_default_limit_is_200():
     assert DataForSEOProvider(login="x", password="y")._limit == 200
 
 
+def test_enrich_keywords_uses_injected_fetch_and_parses():
+    captured = {}
+
+    def raw_enrich(keywords):
+        captured["keywords"] = keywords
+        return {
+            "tasks": [{
+                "result": [{
+                    "items": [
+                        {"keyword": "rf engineering recruiter",
+                         "keyword_info": {"search_volume": 320},
+                         "keyword_properties": {"keyword_difficulty": 18}},
+                    ]
+                }]
+            }]
+        }
+
+    provider = DataForSEOProvider("login", "pw", raw_enrich=raw_enrich)
+    entries = provider.enrich_keywords(["rf engineering recruiter"])
+    assert captured["keywords"] == ["rf engineering recruiter"]
+    assert entries[0].search_volume == 320
+    assert entries[0].difficulty == 18
+
+
+def test_enrich_keywords_empty_input_makes_no_call():
+    def raw_enrich(keywords):
+        raise AssertionError("should not be called for empty input")
+    provider = DataForSEOProvider("login", "pw", raw_enrich=raw_enrich)
+    assert provider.enrich_keywords([]) == []
+
+
 from compresearch.keywords import analyze_keywords
 from compresearch.models import KeywordEntry
 
