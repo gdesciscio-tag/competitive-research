@@ -13,8 +13,8 @@ body{font-family:{{ branding.font_family }};color:{{ branding.text_color }};marg
 .card{flex:1;min-width:120px;background:#f5f7fa;border-radius:8px;padding:12px;}
 .card .label{font-size:12px;color:{{ branding.muted_color }};}
 .card .value{font-size:26px;font-weight:600;}
-.tabs{display:flex;flex-wrap:wrap;gap:4px;border-bottom:2px solid #e4e7eb;margin-bottom:16px;}
-.tab{font-size:13px;padding:8px 14px;border:none;background:none;cursor:pointer;color:{{ branding.muted_color }};border-bottom:2px solid transparent;margin-bottom:-2px;}
+.tabs{display:flex;flex-wrap:nowrap;gap:4px;border-bottom:2px solid #e4e7eb;margin-bottom:16px;overflow-x:auto;}
+.tab{font-size:13px;padding:8px 14px;border:none;background:none;cursor:pointer;color:{{ branding.muted_color }};border-bottom:2px solid transparent;margin-bottom:-2px;white-space:nowrap;flex:0 0 auto;}
 .tab.active{color:{{ branding.primary_color }};border-bottom-color:{{ branding.accent_color }};font-weight:600;}
 .panel{display:none;}
 .panel.active{display:block;}
@@ -79,11 +79,12 @@ ul.links{padding-left:18px;}
       {% for dm in sitemap.domains %}
       <div class="subpanel{% if loop.first %} active{% endif %}" data-subpanel="smdom{{ loop.index }}">
         <p class="domain-meta">{{ dm.total }} pages{% if dm.posts_per_month is not none %} · ~{{ dm.posts_per_month }} posts/month{% endif %}</p>
-        {% if dm.sections %}
-        <table data-sortable><thead><tr><th>Section</th><th class="num" data-num>Pages</th></tr></thead><tbody>
-        {% for s in dm.sections %}<tr><td>{{ s.section }}</td><td class="num">{{ s.count }}</td></tr>{% endfor %}
+        {% if dm.pages %}
+        <input class="filter" type="text" placeholder="Filter pages..." data-filter="smpages{{ loop.index }}">
+        <table data-sortable><thead><tr><th>Page URL</th><th>Last modified</th></tr></thead><tbody data-rows="smpages{{ loop.index }}">
+        {% for p in dm.pages %}<tr><td><a href="{{ p.url }}">{{ p.url }}</a></td><td>{{ p.lastmod if p.lastmod else '—' }}</td></tr>{% endfor %}
         </tbody></table>
-        {% else %}<p class="muted">No section breakdown available for this domain.</p>{% endif %}
+        {% else %}<p class="muted">No page list available for this domain.</p>{% endif %}
       </div>
       {% endfor %}
     </div>
@@ -151,7 +152,6 @@ ul.links{padding-left:18px;}
 
     {% if topical_map.pillars %}
     <div class="panel" data-panel="map">
-      {% if topical_map.summary %}<p class="muted">{{ topical_map.summary }}</p>{% endif %}
       {% for pillar in topical_map.pillars %}
       <h2>{{ pillar.name }}</h2>
       {% for cluster in pillar.clusters %}

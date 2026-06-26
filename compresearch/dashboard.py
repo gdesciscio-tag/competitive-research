@@ -25,10 +25,8 @@ def build_dashboard_context(data: JobData, branding: Branding, report_date: str 
             "domain": short_domain(dom.domain),
             "total": dom.total_urls,
             "posts_per_month": dom.posts_per_month,
-            "sections": sorted(
-                ({"section": name, "count": count} for name, count in dom.section_counts.items()),
-                key=lambda s: s["count"], reverse=True,
-            ),
+            "pages": [{"url": e.loc, "lastmod": e.lastmod.isoformat() if e.lastmod else None}
+                      for e in dom.urls],
         }
 
     sitemap_domains: list[dict] = []
