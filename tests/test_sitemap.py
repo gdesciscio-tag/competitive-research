@@ -337,3 +337,34 @@ def test_run_sitemap_skips_when_cached(tmp_path):
     run_sitemap(job_dir, fetch=fetch)
     assert calls == []                                       # skipped -> never crawled
     assert load_data(job_dir).sitemap.client.total_urls == 7
+
+
+def test_categorize_groups_location_slug_pattern():
+    from compresearch.sitemap import categorize_urls
+    from compresearch.models import UrlEntry
+    urls = [UrlEntry(loc=f"https://acme.com/digital-marketing-{city}-nj")
+            for city in ("passaic", "clifton", "newark")]
+    urls.append(UrlEntry(loc="https://acme.com/about"))
+    counts = categorize_urls(urls)
+    assert counts.get("digital-marketing-*") == 3       # location template surfaced
+    assert counts.get("(individual pages)") == 1        # /about stays individual
+    assert "digital-marketing-passaic-nj" not in counts  # not its own section
+
+
+def test_categorize_keeps_individual_below_threshold():
+    from compresearch.sitemap import categorize_urls
+    from compresearch.models import UrlEntry
+    urls = [UrlEntry(loc="https://acme.com/seo-newark-nj"),
+            UrlEntry(loc="https://acme.com/seo-clifton-nj")]   # only 2 -> below min group
+    counts = categorize_urls(urls)
+    assert counts.get("(individual pages)") == 2
+    assert not any(k.endswith("-*") for k in counts)
+
+
+def test_group_slug_patterns_prefers_specific_prefix_and_spares_unrelated():
+    from compresearch.sitemap import _group_slug_patterns
+    slugs = ["digital-marketing-passaic-nj", "digital-marketing-clifton-nj",
+             "digital-marketing-newark-nj", "digital-strategy-guide"]
+    patterns, leftover = _group_slug_patterns(slugs)
+    assert patterns == {"digital-marketing-*": 3}       # longest shared prefix, not 'digital-*'
+    assert leftover == ["digital-strategy-guide"]       # unrelated page left alone

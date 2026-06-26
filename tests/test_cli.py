@@ -229,6 +229,40 @@ def test_run_job_subcommand_end_to_end(tmp_path):
     assert data.sheet.sheet_url.endswith("FAKE")
 
 
+def test_topical_map_subcommand_exits_nonzero_on_captured_error(tmp_path, make_fake_generator):
+    cfg = JobConfig(client_name="Acme Co", client_url="https://acme.com")
+    job_dir = create_job(cfg, jobs_dir=tmp_path)
+    with pytest.raises(SystemExit) as exc:
+        run_from_args(["topical-map", "--job-dir", str(job_dir)],
+                      generator=make_fake_generator([], raises=RuntimeError("model down")))
+    assert exc.value.code == 1
+    assert "model down" in load_data(job_dir).topical_map.error   # error was captured, not raised
+
+
+def test_draft_post_subcommand_exits_nonzero_on_captured_error(tmp_path, make_draft_generator):
+    job_dir = _seed_job_with_topical_map(tmp_path)
+    with pytest.raises(SystemExit) as exc:
+        run_from_args(["draft-post", "--job-dir", str(job_dir)],
+                      draft_generator=make_draft_generator([], raises=RuntimeError("boom")))
+    assert exc.value.code == 1
+
+
+def test_draft_export_subcommand_partial_does_not_exit_nonzero(tmp_path):
+    from compresearch.models import JobData, DraftPostResult
+    cfg = JobConfig(client_name="Acme Co", client_url="https://acme.com")
+    job_dir = create_job(cfg, jobs_dir=tmp_path)
+    data = JobData(config=cfg, draft_post=DraftPostResult(post=DraftPost(
+        title="T", body_markdown="b")))
+    save_data(job_dir, data)
+
+    def boom(title, html):
+        raise RuntimeError("drive down")
+
+    returned = run_from_args(["draft-export", "--job-dir", str(job_dir)], doc_writer=boom)
+    assert returned == job_dir                                    # partial -> no SystemExit
+    assert load_data(job_dir).draft_export.is_partial is True
+
+
 def test_run_job_subcommand_resume_skips_cached_steps(tmp_path):
     from pathlib import Path as _P
     from tests.test_orchestrator import (

@@ -93,14 +93,57 @@ def fetch_sitemap_urls(
     return entries
 
 
+# A shared hyphen-prefix across this many root-level standalone slugs reads as a
+# deliberate template (e.g. local-SEO location pages) rather than coincidence.
+_SLUG_PATTERN_MIN_GROUP = 3
+
+
+def _group_slug_patterns(
+    slugs: list[str], min_group: int = _SLUG_PATTERN_MIN_GROUP
+) -> tuple[dict[str, int], list[str]]:
+    """Group root-level standalone slugs that share a hyphenated prefix into pattern
+    sections, so local-SEO templates aren't lost in '(individual pages)'. E.g.
+    'digital-marketing-passaic-nj' + '...-clifton-nj' + '...-newark-nj' -> 'digital-marketing-*'.
+
+    Greedy: repeatedly take the longest prefix (most specific) shared by >= min_group
+    slugs, preferring more members then alphabetical on ties. Returns (pattern_counts,
+    leftover_slugs).
+    """
+    remaining = list(slugs)
+    patterns: dict[str, int] = {}
+    while True:
+        members_by_prefix: dict[str, list[str]] = {}
+        for slug in remaining:
+            tokens = slug.split("-")
+            for length in range(1, len(tokens)):   # leave >=1 token as the variable tail
+                prefix = "-".join(tokens[:length])
+                if len(prefix) >= 3:               # skip trivial prefixes ("a-", "to-")
+                    members_by_prefix.setdefault(prefix, []).append(slug)
+        best = None  # (token_len, member_count, -alpha) — maximize specificity, then size
+        for prefix, members in members_by_prefix.items():
+            if len(members) < min_group:
+                continue
+            key = (prefix.count("-") + 1, len(members), tuple(-ord(c) for c in prefix))
+            if best is None or key > best[0]:
+                best = (key, prefix, members)
+        if best is None:
+            break
+        _, prefix, members = best
+        patterns[f"{prefix}-*"] = len(members)
+        chosen = set(members)
+        remaining = [s for s in remaining if s not in chosen]
+    return patterns, remaining
+
+
 def categorize_urls(urls: list[UrlEntry]) -> dict[str, int]:
     """Count URLs by content section.
 
     A first path segment is a real *section* if it groups 2+ URLs or has any deeper path
     under it (e.g. '/blog/post' -> 'blog', '/services/seo' -> 'services'). Root-level
-    standalone pages with no children (e.g. '/my-post', '/about') fold into a single
-    '(individual pages)' bucket, so sites that publish posts at the root don't turn every
-    post into its own one-page section. The homepage is counted as '(root)'.
+    standalone pages with no children (e.g. '/my-post', '/about') normally fold into a
+    single '(individual pages)' bucket — but when several share a hyphen prefix (a local-SEO
+    template like '/digital-marketing-<city>-<state>') they're surfaced as a '<prefix>-*'
+    section so the signal isn't lost. The homepage is counted as '(root)'.
     """
     root_count = 0
     seg_count: dict[str, int] = {}
@@ -119,14 +162,17 @@ def categorize_urls(urls: list[UrlEntry]) -> dict[str, int]:
     counts: dict[str, int] = {}
     if root_count:
         counts["(root)"] = root_count
-    individual = 0
+    individual_slugs: list[str] = []
     for segment, count in seg_count.items():
         if count >= 2 or seg_has_child.get(segment, False):
             counts[segment] = count
         else:
-            individual += count
-    if individual:
-        counts["(individual pages)"] = individual
+            individual_slugs.append(segment)
+
+    pattern_counts, leftover = _group_slug_patterns(individual_slugs)
+    counts.update(pattern_counts)
+    if leftover:
+        counts["(individual pages)"] = len(leftover)
     return counts
 
 

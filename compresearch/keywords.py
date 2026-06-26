@@ -183,6 +183,7 @@ class DataForSEOProvider:
         self._limit = limit
         self._raw_fetch = raw_fetch or self._http_fetch
         self._raw_enrich = raw_enrich or self._http_enrich
+        self.cost_usd = 0.0   # accumulates the `cost` DataForSEO reports on each response
 
     def _http_fetch(self, domain_key: str) -> dict:
         resp = httpx.post(
@@ -217,10 +218,14 @@ class DataForSEOProvider:
         """Look up volume + difficulty for arbitrary keywords (one batched call)."""
         if not keywords:
             return []
-        return parse_keyword_overview(self._raw_enrich(keywords))
+        payload = self._raw_enrich(keywords)
+        self.cost_usd += float(payload.get("cost") or 0.0)
+        return parse_keyword_overview(payload)
 
     def __call__(self, domain: str) -> list[KeywordEntry]:
-        return parse_ranked_keywords(self._raw_fetch(_domain_key(domain)))
+        payload = self._raw_fetch(_domain_key(domain))
+        self.cost_usd += float(payload.get("cost") or 0.0)
+        return parse_ranked_keywords(payload)
 
     @classmethod
     def from_settings(cls) -> "DataForSEOProvider":
@@ -441,13 +446,22 @@ def run_keywords(
         # An injected enricher is always honoured; we only auto-build one for the
         # api source (manual jobs have no DataForSEO credentials to enrich with).
         if enricher is None and data.config.keyword_source == "api":
-            try:
-                enricher = DataForSEOProvider.from_settings().enrich_keywords
-            except Exception as exc:
-                logging.warning("No enricher available for provided keywords: %s", exc)
+            if isinstance(provider, DataForSEOProvider):
+                enricher = provider.enrich_keywords   # reuse so its cost is tracked too
+            else:
+                try:
+                    enricher = DataForSEOProvider.from_settings().enrich_keywords
+                except Exception as exc:
+                    logging.warning("No enricher available for provided keywords: %s", exc)
         data.keywords.provided = analyze_provided_keywords(
             terms, data.keywords.client, data.keywords.competitors, enricher
         )
+
+    # Record DataForSEO spend (api mode); providers without a cost (manual CSV, test
+    # fakes) leave it None.
+    cost = getattr(provider, "cost_usd", None)
+    if cost:
+        data.keywords.cost_usd = round(cost, 4)
 
     save_data(job_dir, data)
     return data

@@ -522,3 +522,26 @@ def test_run_keywords_force_recomputes(tmp_path, make_provider):
     provider = make_provider({"acme.com": [KeywordEntry(keyword="crm", search_volume=10, position=3)]})
     run_keywords(job_dir, provider=provider, force=True)
     assert load_data(job_dir).keywords.client.total_keywords == 1   # recomputed from provider
+
+
+def test_dataforseo_provider_accumulates_reported_cost():
+    from compresearch.keywords import DataForSEOProvider
+    ranked = {"cost": 0.02, "tasks": [{"result": [{"items": []}]}]}
+    overview = {"cost": 0.01, "tasks": [{"result": [{"items": []}]}]}
+    p = DataForSEOProvider("u", "pw", raw_fetch=lambda d: ranked, raw_enrich=lambda k: overview)
+    p("https://acme.com")
+    p.enrich_keywords(["crm"])
+    assert p.cost_usd == 0.03
+
+
+def test_run_keywords_records_dataforseo_cost(tmp_path):
+    from compresearch.keywords import run_keywords, DataForSEOProvider
+    from compresearch.job_store import create_job, load_data
+    from compresearch.models import JobConfig
+    cfg = JobConfig(client_name="Acme Co", client_url="https://acme.com",
+                    competitor_urls=["https://rival.com"])
+    job_dir = create_job(cfg, jobs_dir=tmp_path)
+    ranked = {"cost": 0.05, "tasks": []}
+    provider = DataForSEOProvider("u", "pw", raw_fetch=lambda d: ranked)
+    run_keywords(job_dir, provider=provider)
+    assert load_data(job_dir).keywords.cost_usd == 0.1   # client + 1 competitor, 0.05 each

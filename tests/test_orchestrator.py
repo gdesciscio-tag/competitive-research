@@ -173,6 +173,36 @@ def test_run_job_force_recomputes_everything(tmp_path):
     assert data.run_report.total_cost_usd > 0.0   # the LLM steps ran again
 
 
+def test_run_job_folds_dataforseo_cost_into_report(tmp_path):
+    from pathlib import Path
+    from compresearch.keywords import DataForSEOProvider
+    cfg = JobConfig(client_name="Acme Co", client_url="https://acme.com",
+                    competitor_urls=["https://rival.com"])
+    job_dir = create_job(cfg, jobs_dir=tmp_path)
+
+    # a DataForSEO provider whose responses report a per-call cost
+    kw_provider = DataForSEOProvider("u", "pw", raw_fetch=lambda d: {"cost": 0.05, "tasks": []})
+
+    def html_to_pdf(html, output_path):
+        Path(output_path).write_text("PDF", encoding="utf-8")
+
+    data = run_job(
+        job_dir,
+        fetch=_sitemap_fetch(), keyword_provider=kw_provider,
+        topical_generator=_topical_generator(), draft_generator=_draft_generator(),
+        html_to_pdf=html_to_pdf,
+        sheet_writer=lambda title, tabs: "https://docs.google.com/spreadsheets/d/FAKE",
+        doc_writer=lambda title, html: "https://docs.google.com/document/d/DOCFAKE/edit",
+    )
+    steps = {s.name: s for s in data.run_report.steps}
+    assert steps["keywords"].cost_usd == 0.1          # client + 1 competitor, 0.05 each
+    # the total now includes DataForSEO on top of the Claude steps
+    assert data.run_report.total_cost_usd == round(
+        sum(s.cost_usd or 0.0 for s in steps.values()), 4
+    )
+    assert data.run_report.total_cost_usd > 0.1
+
+
 def test_run_job_is_resilient_to_a_failed_step(tmp_path):
     cfg = JobConfig(client_name="Acme Co", client_url="https://acme.com",
                     competitor_urls=["https://rival.com"])

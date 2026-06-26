@@ -109,7 +109,8 @@ def _run_pipeline(
         try:
             run_keywords(job_dir, provider=keyword_provider, force=force)
             status, err = _section_status(job_dir, "keywords")
-            record("keywords", status, err, t)
+            kw = load_data(job_dir).keywords
+            record("keywords", status, err, t, getattr(kw, "cost_usd", None))
         except Exception as exc:
             record("keywords", "failed", str(exc), t)
 
@@ -171,7 +172,7 @@ def _run_pipeline(
     data.run_report = RunReport(steps=steps, total_cost_usd=total)
     save_data(job_dir, data)
     logging.info(
-        "Job %s finished: %s steps ok, total LLM cost $%.4f",
+        "Job %s finished: %s steps ok, total API cost $%.4f",
         job_dir, sum(1 for s in steps if s.status == "ok"), total,
     )
     return data

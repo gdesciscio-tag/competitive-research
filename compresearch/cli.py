@@ -36,7 +36,7 @@ def _print_run_summary(data) -> None:
         print(f"  Sheet: {data.sheet.sheet_url}")
     _print_draft_exports(data)
     _print_draft_warnings(data)
-    print(f"  Estimated LLM cost: ${report.total_cost_usd:.4f}\n")
+    print(f"  Estimated API cost: ${report.total_cost_usd:.4f}\n")
 
 
 def _print_draft_warnings(data) -> None:
@@ -81,6 +81,28 @@ def _print_outputs_summary(data) -> None:
         print(f"  Sheet: {data.sheet.sheet_url}")
     _print_draft_exports(data)
     print()
+
+
+def _verify_step(job_dir: Path, attr: str) -> None:
+    """Reflect a step's real outcome in the process exit. A `run_*` captures its own
+    failure into the section's `.error` and returns normally, so without this a failed
+    single-step command would still report success. A captured error exits non-zero;
+    a partial result prints a warning but succeeds."""
+    section = getattr(load_data(job_dir), attr, None)
+    if section is None:
+        return
+    error = getattr(section, "error", None)
+    partial = getattr(section, "is_partial", False)
+    if error and not partial:
+        msg = f"Error: {attr} failed — {error}"
+        hint = remediation_hint(error)
+        if hint:
+            msg += f"\n  fix: {hint}"
+        print(msg, file=sys.stderr)
+        raise SystemExit(1)
+    if partial:
+        note = error or "some data could not be fully retrieved"
+        print(f"Warning: {attr} completed partially — {note}", file=sys.stderr)
 
 
 def run_from_args(argv: list[str], fetch: Fetcher = http_fetch, provider=None, generator: Generator | None = None, draft_generator: DraftGenerator | None = None, html_to_pdf=render_pdf, sheet_writer=None, doc_writer=None) -> Path:
@@ -149,6 +171,7 @@ def run_from_args(argv: list[str], fetch: Fetcher = http_fetch, provider=None, g
         job_dir = create_job(config, jobs_dir=Path(args.jobs_dir))
         with job_log(job_dir):
             run_sitemap(job_dir, fetch=fetch, force=args.force)
+        _verify_step(job_dir, "sitemap")
         return job_dir
 
     if args.command == "keywords":
@@ -159,6 +182,7 @@ def run_from_args(argv: list[str], fetch: Fetcher = http_fetch, provider=None, g
         except (RuntimeError, ValueError, FileNotFoundError) as exc:
             print(f"Error: {exc}", file=sys.stderr)
             raise SystemExit(1)
+        _verify_step(job_dir, "keywords")
         return job_dir
 
     if args.command == "topical-map":
@@ -169,6 +193,7 @@ def run_from_args(argv: list[str], fetch: Fetcher = http_fetch, provider=None, g
         except (RuntimeError, ValueError, FileNotFoundError) as exc:
             print(f"Error: {exc}", file=sys.stderr)
             raise SystemExit(1)
+        _verify_step(job_dir, "topical_map")
         return job_dir
 
     if args.command == "draft-post":
@@ -181,6 +206,7 @@ def run_from_args(argv: list[str], fetch: Fetcher = http_fetch, provider=None, g
             print(f"Error: {exc}", file=sys.stderr)
             raise SystemExit(1)
         _print_draft_warnings(load_data(job_dir))
+        _verify_step(job_dir, "draft_post")
         return job_dir
 
     if args.command == "render":
@@ -191,6 +217,7 @@ def run_from_args(argv: list[str], fetch: Fetcher = http_fetch, provider=None, g
         except (RuntimeError, ValueError, FileNotFoundError) as exc:
             print(f"Error: {exc}", file=sys.stderr)
             raise SystemExit(1)
+        _verify_step(job_dir, "render")
         return job_dir
 
     if args.command == "sheet":
@@ -201,12 +228,14 @@ def run_from_args(argv: list[str], fetch: Fetcher = http_fetch, provider=None, g
         except (RuntimeError, ValueError, FileNotFoundError) as exc:
             print(f"Error: {exc}", file=sys.stderr)
             raise SystemExit(1)
+        _verify_step(job_dir, "sheet")
         return job_dir
 
     if args.command == "draft-export":
         job_dir = Path(args.job_dir)
         with job_log(job_dir):
             run_draft_export(job_dir, doc_writer=doc_writer)
+        _verify_step(job_dir, "draft_export")
         return job_dir
 
     if args.command == "refresh-outputs":

@@ -88,6 +88,7 @@ class KeywordResult(BaseModel):
     gaps: list[KeywordGap] = Field(default_factory=list)
     quick_wins: list[QuickWin] = Field(default_factory=list)
     provided: list[ProvidedKeyword] = Field(default_factory=list)
+    cost_usd: float | None = None  # DataForSEO API spend for this step (api mode)
     is_partial: bool = False
 
 
