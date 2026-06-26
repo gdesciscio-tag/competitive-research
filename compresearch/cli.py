@@ -5,6 +5,7 @@ import argparse
 import sys
 from pathlib import Path
 
+from compresearch.dashboard import run_dashboard
 from compresearch.draft_export import run_draft_export
 from compresearch.draft_post import run_draft_post, DraftGenerator
 from compresearch.job_store import create_job, load_data
@@ -34,6 +35,8 @@ def _print_run_summary(data) -> None:
         print(f"  PDF:   {data.render.pdf_path}")
     if data.sheet is not None and data.sheet.sheet_url:
         print(f"  Sheet: {data.sheet.sheet_url}")
+    if data.dashboard is not None and data.dashboard.html_path:
+        print(f"  Dashboard: {data.dashboard.html_path}")
     _print_draft_exports(data)
     _print_draft_warnings(data)
     print(f"  Estimated API cost: ${report.total_cost_usd:.4f}\n")
@@ -79,6 +82,8 @@ def _print_outputs_summary(data) -> None:
         print(f"  PDF:   {data.render.pdf_path}")
     if data.sheet is not None and data.sheet.sheet_url:
         print(f"  Sheet: {data.sheet.sheet_url}")
+    if data.dashboard is not None and data.dashboard.html_path:
+        print(f"  Dashboard: {data.dashboard.html_path}")
     _print_draft_exports(data)
     print()
 
@@ -139,6 +144,9 @@ def run_from_args(argv: list[str], fetch: Fetcher = http_fetch, provider=None, g
 
     de = sub.add_parser("draft-export", help="Export the draft post to HTML + a Google Doc")
     de.add_argument("--job-dir", required=True)
+
+    db = sub.add_parser("dashboard", help="Build the self-contained client dashboard HTML for an existing job")
+    db.add_argument("--job-dir", required=True)
 
     ro = sub.add_parser(
         "refresh-outputs",
@@ -238,12 +246,20 @@ def run_from_args(argv: list[str], fetch: Fetcher = http_fetch, provider=None, g
         _verify_step(job_dir, "draft_export")
         return job_dir
 
+    if args.command == "dashboard":
+        job_dir = Path(args.job_dir)
+        with job_log(job_dir):
+            run_dashboard(job_dir)
+        _verify_step(job_dir, "dashboard")
+        return job_dir
+
     if args.command == "refresh-outputs":
         job_dir = Path(args.job_dir)
         with job_log(job_dir):
             run_draft_export(job_dir, doc_writer=doc_writer)
             run_render(job_dir, html_to_pdf=html_to_pdf)
             run_sheet(job_dir, writer=sheet_writer)
+            run_dashboard(job_dir)
         _print_outputs_summary(load_data(job_dir))
         return job_dir
 

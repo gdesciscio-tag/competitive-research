@@ -223,7 +223,7 @@ def test_run_job_subcommand_end_to_end(tmp_path):
     assert returned == tmp_path / "acme-co"
     data = load_data(returned)
     assert [s.name for s in data.run_report.steps] == [
-        "sitemap", "keywords", "topical_map", "draft_post", "draft_export", "render", "sheet",
+        "sitemap", "keywords", "topical_map", "draft_post", "draft_export", "render", "sheet", "dashboard",
     ]
     assert all(s.status == "ok" for s in data.run_report.steps)
     assert data.sheet.sheet_url.endswith("FAKE")
@@ -355,3 +355,39 @@ def test_refresh_outputs_subcommand_rebuilds_all_outputs(tmp_path):
     assert (job_dir / "outputs" / "acme-co-draft-2.html").exists()
     assert data.render.pdf_path.endswith(".pdf")
     assert data.sheet.sheet_url.endswith("FAKE")
+
+
+def test_dashboard_subcommand_writes_file(tmp_path):
+    from compresearch.models import JobData, DraftPostResult
+    cfg = JobConfig(client_name="Acme Co", client_url="https://acme.com")
+    job_dir = create_job(cfg, jobs_dir=tmp_path)
+    data = JobData(config=cfg, draft_post=DraftPostResult(post=DraftPost(
+        title="What is a CRM?", body_markdown="# What is a CRM?\n\nBody.")))
+    save_data(job_dir, data)
+
+    returned = run_from_args(["dashboard", "--job-dir", str(job_dir)])
+    assert returned == job_dir
+    reloaded = load_data(job_dir)
+    assert reloaded.dashboard.html_path.endswith("acme-co-dashboard.html")
+    assert (job_dir / "outputs" / "acme-co-dashboard.html").exists()
+
+
+def test_refresh_outputs_includes_dashboard(tmp_path):
+    from compresearch.models import JobData, DraftPostResult
+    cfg = JobConfig(client_name="Acme Co", client_url="https://acme.com")
+    job_dir = create_job(cfg, jobs_dir=tmp_path)
+    data = JobData(config=cfg, draft_posts=[DraftPostResult(post=DraftPost(
+        title="T", body_markdown="# T\n\nBody."))])
+    save_data(job_dir, data)
+
+    def html_to_pdf(html, output_path):
+        from pathlib import Path as _P
+        _P(output_path).write_text("PDF", encoding="utf-8")
+
+    run_from_args(
+        ["refresh-outputs", "--job-dir", str(job_dir)],
+        html_to_pdf=html_to_pdf,
+        sheet_writer=lambda title, tabs: "https://docs.google.com/spreadsheets/d/FAKE",
+        doc_writer=lambda title, html: "https://docs.google.com/document/d/DOC/edit",
+    )
+    assert load_data(job_dir).dashboard.html_path is not None
