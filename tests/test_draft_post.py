@@ -153,6 +153,48 @@ def test_run_draft_post_persists_and_filters_internal_links(tmp_path, make_fetch
     assert "https://acme.com/pricing" in captured[0]
 
 
+def test_run_draft_post_appends_second_keyword_and_rerolls_same(tmp_path, make_draft_generator):
+    # A job whose topical map has two articles; draft each, then re-draft the first.
+    cfg = JobConfig(client_name="Acme Co", client_url="https://acme.com")
+    job_dir = create_job(cfg, jobs_dir=tmp_path)
+    data = load_data(job_dir)
+    data.topical_map = TopicalMapResult(map=TopicalMap(pillars=[PillarTopic(name="P",
+        clusters=[TopicCluster(name="C", articles=[
+            ArticleIdea(title="What is a CRM?", target_keyword="what is a crm", estimated_volume=2000),
+            ArticleIdea(title="CRM pricing", target_keyword="crm pricing", estimated_volume=900),
+        ])])]), model="m")
+    save_data(job_dir, data)
+
+    # 1) highest-volume topic drafted by default
+    run_draft_post(job_dir, generator=make_draft_generator(
+        [], post=DraftPost(title="What is a CRM?", target_keyword="what is a crm", body_markdown="v1")))
+    # 2) a second, different topic -> appended
+    run_draft_post(job_dir, generator=make_draft_generator(
+        [], post=DraftPost(title="CRM pricing", target_keyword="crm pricing", body_markdown="p1")),
+        preferred_keyword="crm pricing")
+    data = load_data(job_dir)
+    assert [d.selected_keyword for d in data.draft_posts] == ["what is a crm", "crm pricing"]
+
+    # 3) re-draft the first topic -> replaces in place, no duplicate, order preserved
+    run_draft_post(job_dir, generator=make_draft_generator(
+        [], post=DraftPost(title="What is a CRM?", target_keyword="what is a crm", body_markdown="v2")),
+        preferred_keyword="what is a crm")
+    data = load_data(job_dir)
+    assert [d.selected_keyword for d in data.draft_posts] == ["what is a crm", "crm pricing"]
+    assert data.draft_posts[0].post.body_markdown == "v2"   # re-rolled content
+    assert data.draft_post.post.body_markdown == "v2"       # latest result points at the re-roll
+
+
+def test_run_draft_post_error_keeps_prior_drafts(tmp_path, make_draft_generator):
+    job_dir = _seed_draft_job(tmp_path, with_sitemap=False)
+    run_draft_post(job_dir, generator=make_draft_generator(
+        [], post=DraftPost(title="What is a CRM?", target_keyword="what is a crm", body_markdown="ok")))
+    run_draft_post(job_dir, generator=make_draft_generator([], raises=RuntimeError("boom")))
+    data = load_data(job_dir)
+    assert [d.selected_keyword for d in data.draft_posts] == ["what is a crm"]  # failure not appended
+    assert data.draft_post.error == "boom"                                     # step still reports error
+
+
 def test_run_draft_post_without_topical_map_records_error(tmp_path, make_draft_generator):
     cfg = JobConfig(client_name="Acme Co", client_url="https://acme.com")
     job_dir = create_job(cfg, jobs_dir=tmp_path)

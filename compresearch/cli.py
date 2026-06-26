@@ -7,7 +7,7 @@ from pathlib import Path
 
 from compresearch.draft_export import run_draft_export
 from compresearch.draft_post import run_draft_post, DraftGenerator
-from compresearch.job_store import create_job
+from compresearch.job_store import create_job, load_data
 from compresearch.keywords import run_keywords, Provider
 from compresearch.models import JobConfig
 from compresearch.orchestrator import run_job
@@ -30,12 +30,39 @@ def _print_run_summary(data) -> None:
         print(f"  PDF:   {data.render.pdf_path}")
     if data.sheet is not None and data.sheet.sheet_url:
         print(f"  Sheet: {data.sheet.sheet_url}")
-    if data.draft_export is not None:
+    _print_draft_exports(data)
+    print(f"  Estimated LLM cost: ${report.total_cost_usd:.4f}\n")
+
+
+def _print_draft_exports(data) -> None:
+    """List every exported draft (HTML path + Google Doc URL), one block per draft."""
+    if data.draft_export is None:
+        return
+    items = data.draft_export.items or []
+    if not items:  # legacy single-draft export with only top-level fields
         if data.draft_export.html_path:
             print(f"  Draft HTML: {data.draft_export.html_path}")
         if data.draft_export.doc_url:
             print(f"  Draft Doc:  {data.draft_export.doc_url}")
-    print(f"  Estimated LLM cost: ${report.total_cost_usd:.4f}\n")
+        return
+    multiple = len(items) > 1
+    for index, item in enumerate(items, 1):
+        label = f"Draft {index}" if multiple else "Draft"
+        if item.html_path:
+            print(f"  {label} HTML: {item.html_path}")
+        if item.doc_url:
+            print(f"  {label} Doc:  {item.doc_url}")
+
+
+def _print_outputs_summary(data) -> None:
+    """Print the regenerated outputs after a refresh-outputs run."""
+    print("\nOutputs refreshed:")
+    if data.render is not None and data.render.pdf_path:
+        print(f"  PDF:   {data.render.pdf_path}")
+    if data.sheet is not None and data.sheet.sheet_url:
+        print(f"  Sheet: {data.sheet.sheet_url}")
+    _print_draft_exports(data)
+    print()
 
 
 def run_from_args(argv: list[str], fetch: Fetcher = http_fetch, provider=None, generator: Generator | None = None, draft_generator: DraftGenerator | None = None, html_to_pdf=render_pdf, sheet_writer=None, doc_writer=None) -> Path:
@@ -67,6 +94,13 @@ def run_from_args(argv: list[str], fetch: Fetcher = http_fetch, provider=None, g
 
     de = sub.add_parser("draft-export", help="Export the draft post to HTML + a Google Doc")
     de.add_argument("--job-dir", required=True)
+
+    ro = sub.add_parser(
+        "refresh-outputs",
+        help="Re-export drafts and rebuild the PDF + Google Sheet for an existing job "
+        "(run after drafting another post so the outputs include it)",
+    )
+    ro.add_argument("--job-dir", required=True)
 
     rj = sub.add_parser("run-job", help="Run the full competitive-research pipeline for a client")
     rj.add_argument("--client-name", required=True)
@@ -137,6 +171,14 @@ def run_from_args(argv: list[str], fetch: Fetcher = http_fetch, provider=None, g
     if args.command == "draft-export":
         job_dir = Path(args.job_dir)
         run_draft_export(job_dir, doc_writer=doc_writer)
+        return job_dir
+
+    if args.command == "refresh-outputs":
+        job_dir = Path(args.job_dir)
+        run_draft_export(job_dir, doc_writer=doc_writer)
+        run_render(job_dir, html_to_pdf=html_to_pdf)
+        run_sheet(job_dir, writer=sheet_writer)
+        _print_outputs_summary(load_data(job_dir))
         return job_dir
 
     if args.command == "run-job":

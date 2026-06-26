@@ -191,6 +191,18 @@ def _client_urls(data: JobData) -> list[str]:
     return []
 
 
+def _upsert_draft(drafts: list[DraftPostResult], result: DraftPostResult) -> None:
+    """Add a successful draft to the accumulated list. Re-drafting the same keyword
+    replaces that draft in place (a re-roll); a new keyword is appended (an extra post)."""
+    key = result.selected_keyword
+    if key:
+        for index, existing in enumerate(drafts):
+            if existing.selected_keyword == key:
+                drafts[index] = result
+                return
+    drafts.append(result)
+
+
 def run_draft_post(
     job_dir: Path,
     generator: DraftGenerator | None = None,
@@ -235,7 +247,9 @@ def run_draft_post(
         post = generator(prompt)
         candidate_set = set(candidates)
         post.internal_links = [link for link in post.internal_links if link.url in candidate_set]
-        data.draft_post = DraftPostResult(post=post, model=model, selected_keyword=selected)
+        result = DraftPostResult(post=post, model=model, selected_keyword=selected)
+        data.draft_post = result
+        _upsert_draft(data.draft_posts, result)
     except Exception as exc:
         logging.warning("Draft post generation failed for %s: %s", data.config.client_url, exc)
         data.draft_post = DraftPostResult(model=model, selected_keyword=selected, error=str(exc))

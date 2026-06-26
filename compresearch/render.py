@@ -163,20 +163,21 @@ def build_report_context(data: JobData, branding: Branding, report_date: str | N
         pillars = data.topical_map.map.pillars
         topical_summary = data.topical_map.map.summary
 
-    # --- draft ---
-    draft = None
-    if data.draft_post is not None and data.draft_post.post is not None:
-        post = data.draft_post.post
-        draft = {
-            "title": post.title,
-            "title_tag": post.title_tag,
-            "meta_description": post.meta_description,
-            # body_html is trusted LLM output, rendered with |safe in the template without
-            # sanitization. Trust boundary: LLM -> agency -> static client PDF. If this HTML
-            # is ever served to a browser or sourced from untrusted models, sanitize first.
-            "body_html": markdown_to_html(post.body_markdown),
-            "internal_links": [{"anchor": l.anchor, "url": l.url} for l in post.internal_links],
+    # --- drafts ---
+    # body_html is trusted LLM output, rendered with |safe in the template without
+    # sanitization. Trust boundary: LLM -> agency -> static client PDF. If this HTML
+    # is ever served to a browser or sourced from untrusted models, sanitize first.
+    drafts = [
+        {
+            "title": d.post.title,
+            "title_tag": d.post.title_tag,
+            "meta_description": d.post.meta_description,
+            "body_html": markdown_to_html(d.post.body_markdown),
+            "internal_links": [{"anchor": l.anchor, "url": l.url} for l in d.post.internal_links],
         }
+        for d in data.draft_posts
+        if d.post is not None
+    ]
 
     # --- charts ---
     content_volume_svg = _bar_chart_svg(
@@ -214,7 +215,7 @@ def build_report_context(data: JobData, branding: Branding, report_date: str | N
         },
         "keywords": {"gaps": keyword_gaps, "quick_wins": quick_wins},
         "topical_map": {"pillars": pillars, "summary": topical_summary},
-        "draft": draft,
+        "drafts": drafts,
         "charts": {"content_volume_svg": content_volume_svg, "keyword_counts_svg": keyword_counts_svg},
     }
 

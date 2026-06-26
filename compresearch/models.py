@@ -5,7 +5,7 @@ from datetime import date
 from typing import Literal
 from urllib.parse import urlparse
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 def _has_host(url: str) -> bool:
@@ -168,11 +168,23 @@ class SheetResult(BaseModel):
     error: str | None = None
 
 
-class DraftExportResult(BaseModel):
-    html_path: str | None = None    # local outputs/<slug>-draft.html
+class DraftExportItem(BaseModel):
+    # One exported draft: a local HTML file and (optionally) a Google Doc.
+    selected_keyword: str | None = None  # which draft this is, matches DraftPostResult
+    html_path: str | None = None    # local outputs/<slug>-draft[-N].html
     doc_url: str | None = None      # Google Doc in the Shared Drive
     is_partial: bool = False        # HTML written but Doc creation failed
     error: str | None = None        # set only when even HTML could not be written
+
+
+class DraftExportResult(BaseModel):
+    items: list[DraftExportItem] = Field(default_factory=list)
+    # Top-level fields mirror the first item so single-draft callers (and the run
+    # summary) keep working unchanged; is_partial/error are aggregates across items.
+    html_path: str | None = None    # local outputs/<slug>-draft.html (first item)
+    doc_url: str | None = None      # Google Doc in the Shared Drive (first item)
+    is_partial: bool = False        # any item HTML-only (Doc creation failed)
+    error: str | None = None        # set when even HTML could not be written
 
 
 class StepResult(BaseModel):
@@ -217,8 +229,19 @@ class JobData(BaseModel):
     sitemap: SitemapResult | None = None
     keywords: KeywordResult | None = None
     topical_map: TopicalMapResult | None = None
-    draft_post: DraftPostResult | None = None
+    draft_post: DraftPostResult | None = None       # the most recent draft step result
+    draft_posts: list[DraftPostResult] = Field(default_factory=list)  # all successful drafts
     draft_export: DraftExportResult | None = None
     render: RenderResult | None = None
     sheet: SheetResult | None = None
     run_report: RunReport | None = None
+
+    @model_validator(mode="after")
+    def _backfill_draft_posts(self) -> "JobData":
+        """Migrate single-draft jobs (and fixtures that set only draft_post): if no
+        draft_posts list is present but a successful draft_post is, seed the list from it.
+        Lets older data.json files and callers that set only draft_post still expose the
+        full multi-draft surface that consumers now read from draft_posts."""
+        if not self.draft_posts and self.draft_post is not None and self.draft_post.post is not None:
+            self.draft_posts = [self.draft_post]
+        return self

@@ -119,7 +119,7 @@ def test_build_report_context_shape():
     assert ctx["keywords"]["gaps"][0]["keyword"] == "free crm"
     assert ctx["topical_map"]["pillars"][0].name == "CRM Basics"
     # draft body markdown is rendered to HTML
-    assert "<strong>helps</strong>" in ctx["draft"]["body_html"]
+    assert "<strong>helps</strong>" in ctx["drafts"][0]["body_html"]
     # charts are SVG strings
     assert ctx["charts"]["content_volume_svg"].startswith("<svg")
 
@@ -128,7 +128,7 @@ def test_build_report_context_handles_missing_sections():
     data = JobData(config=JobConfig(client_name="X", client_url="https://x.com"))
     ctx = build_report_context(data, Branding(), report_date=None)
     assert ctx["summary"]["competitor_count"] == 0
-    assert ctx["draft"] is None
+    assert ctx["drafts"] == []
     assert ctx["topical_map"]["pillars"] == []
     assert ctx["charts"]["content_volume_svg"] == ""   # nothing to chart
 
@@ -245,6 +245,20 @@ def test_render_report_html_shows_draft_title():
     # the draft title renders as a heading even if the body has no H1
     html = render_report_html(build_report_context(_full_jobdata(), Branding()))
     assert "<h3>What is a CRM?</h3>" in html
+
+
+def test_render_report_html_renders_every_draft():
+    data = _full_jobdata()
+    data.draft_posts = [
+        DraftPostResult(post=DraftPost(title="What is a CRM?", body_markdown="# A\n\nFirst body.")),
+        DraftPostResult(post=DraftPost(title="CRM Pricing", body_markdown="# B\n\nSecond body.")),
+    ]
+    html = render_report_html(build_report_context(data, Branding()))
+    assert "<h3>What is a CRM?</h3>" in html
+    assert "<h3>CRM Pricing</h3>" in html
+    assert "First body." in html and "Second body." in html
+    # sections are numbered when there is more than one draft
+    assert "Sample Blog Post 1" in html and "Sample Blog Post 2" in html
 
 
 def test_markdown_to_html_renders_bold_and_headings():

@@ -115,9 +115,9 @@
   {% else %}<p class="muted">No topical map was generated.</p>{% endfor %}
 </section>
 
-{% if draft %}
+{% for draft in drafts %}
 <section class="page">
-  <h2>Sample Blog Post</h2>
+  <h2>Sample Blog Post{% if drafts|length > 1 %} {{ loop.index }}{% endif %}</h2>
   <h3>{{ draft.title }}</h3>
   <div class="draft">
     {% if draft.title_tag %}<div class="meta"><strong>SEO title tag:</strong> {{ draft.title_tag }}</div>{% endif %}
@@ -129,7 +129,7 @@
     {% endif %}
   </div>
 </section>
-{% endif %}
+{% endfor %}
 
 <section class="page">
   <h2>Recommended Next Steps</h2>

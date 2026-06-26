@@ -8,7 +8,7 @@ from xml.sax.saxutils import escape
 
 from compresearch.branding import load_branding
 from compresearch.job_store import load_data, save_data, slugify
-from compresearch.models import Branding, DraftExportResult, DraftPost, JobData
+from compresearch.models import Branding, DraftExportItem, DraftExportResult, DraftPost, JobData
 from compresearch.render import markdown_to_html
 from compresearch.settings import get_secret
 
@@ -120,13 +120,17 @@ class GoogleDocWriter:
 
 
 def run_draft_export(job_dir: Path, doc_writer: DocWriter | None = None, branding: Branding | None = None) -> JobData:
-    """Render the draft to a local HTML file and a Google Doc; record both in data.json.
+    """Render every draft to a local HTML file and a Google Doc; record them in data.json.
 
-    The local HTML is always written first; a Drive/Doc failure leaves the HTML in place
-    and marks the result partial. Never raises — failures are captured like the other steps.
+    Exports each entry in data.draft_posts (so a re-drafted/second post is included). The
+    first draft keeps the stable `<slug>-draft.html` name; extras get `-2`, `-3`, … Each
+    draft's HTML is written first; a Drive/Doc failure leaves that HTML in place and marks
+    the item partial. Top-level fields mirror the first draft. Never raises — failures are
+    captured like the other steps.
     """
     data = load_data(job_dir)
-    if data.draft_post is None or data.draft_post.post is None:
+    drafts = [d for d in data.draft_posts if d.post is not None]
+    if not drafts:
         logging.warning(
             "No draft post to export for %s; run the draft-post module first",
             data.config.client_url,
@@ -136,39 +140,61 @@ def run_draft_export(job_dir: Path, doc_writer: DocWriter | None = None, brandin
         return data
 
     branding = branding or load_branding()
-    post = data.draft_post.post
     slug = slugify(data.config.client_name)
-    output_path = Path(job_dir) / "outputs" / f"{slug}-draft.html"
+    multiple = len(drafts) > 1
 
-    try:
-        html = build_draft_html(post, branding)
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        output_path.write_text(html, encoding="utf-8")
-    except Exception as exc:
-        logging.warning("Draft HTML render failed for %s: %s", data.config.client_url, exc)
-        data.draft_export = DraftExportResult(error=str(exc))
-        save_data(job_dir, data)
-        return data
-
-    result = DraftExportResult(html_path=str(output_path))
-    if doc_writer is None:
+    # Resolve the Doc writer once; if it's unavailable every item is HTML-only/partial.
+    writer = doc_writer
+    writer_error: str | None = None
+    if writer is None:
         try:
-            doc_writer = GoogleDocWriter.from_settings()
+            writer = GoogleDocWriter.from_settings()
         except Exception as exc:
             logging.warning("Google Doc writer unavailable for %s: %s", data.config.client_url, exc)
-            result.is_partial = True
-            result.error = str(exc)
-            data.draft_export = result
-            save_data(job_dir, data)
-            return data
+            writer_error = str(exc)
 
-    title = f"{data.config.client_name} — Draft Post"
-    try:
-        result.doc_url = doc_writer(title, html)
-    except Exception as exc:
-        logging.warning("Google Doc creation failed for %s: %s", data.config.client_url, exc)
-        result.is_partial = True
-        result.error = str(exc)
-    data.draft_export = result
+    items: list[DraftExportItem] = []
+    for index, draft in enumerate(drafts):
+        post = draft.post
+        suffix = "" if index == 0 else f"-{index + 1}"
+        output_path = Path(job_dir) / "outputs" / f"{slug}-draft{suffix}.html"
+        item = DraftExportItem(selected_keyword=draft.selected_keyword)
+
+        try:
+            html = build_draft_html(post, branding)
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            output_path.write_text(html, encoding="utf-8")
+            item.html_path = str(output_path)
+        except Exception as exc:
+            logging.warning("Draft HTML render failed for %s: %s", data.config.client_url, exc)
+            item.error = str(exc)
+            items.append(item)
+            continue
+
+        if writer is None:
+            item.is_partial = True
+            item.error = writer_error
+            items.append(item)
+            continue
+
+        title = f"{data.config.client_name} — Draft Post"
+        if multiple:
+            title = f"{title}: {post.title}"
+        try:
+            item.doc_url = writer(title, html)
+        except Exception as exc:
+            logging.warning("Google Doc creation failed for %s: %s", data.config.client_url, exc)
+            item.is_partial = True
+            item.error = str(exc)
+        items.append(item)
+
+    first = items[0]
+    data.draft_export = DraftExportResult(
+        items=items,
+        html_path=first.html_path,
+        doc_url=first.doc_url,
+        is_partial=any(i.is_partial for i in items),
+        error=first.error,
+    )
     save_data(job_dir, data)
     return data

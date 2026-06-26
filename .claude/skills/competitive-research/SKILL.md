@@ -35,6 +35,18 @@ Confirm `.env` has the needed keys before running:
 
 Add `--keyword-source manual` for the manual KeySearch path.
 
+## Draft additional posts (optional)
+
+The job drafts one post (the highest-volume topic). To add more, run `draft-post` against the
+existing job with a different `--keyword` — each new keyword is kept alongside the others
+(re-running the same keyword re-rolls it). Then run `refresh-outputs --job-dir <dir>` to
+rebuild the PDF, Google Sheet, and exported drafts so they include every draft.
+
+```
+.venv\Scripts\python -m compresearch.cli draft-post --job-dir jobs\<slug> --keyword "<topic>"
+.venv\Scripts\python -m compresearch.cli refresh-outputs --job-dir jobs\<slug>
+```
+
 ## Report back
 
 The command prints a per-step summary (which steps succeeded/failed), the branded PDF path,

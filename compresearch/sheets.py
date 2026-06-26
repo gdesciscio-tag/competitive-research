@@ -364,21 +364,37 @@ def build_sheet_model(data: JobData, run_date: str | None = None) -> list[SheetT
                     ])
         tabs.append(SheetTab("Topical Map", rows, header=True, number_formats={5: "#,##0"}))
 
-    # --- Draft post (metadata only; the prose lives in the exported Doc/HTML) ---
-    if data.draft_post is not None and data.draft_post.post is not None:
-        post = data.draft_post.post
+    # --- Draft posts (metadata only; the prose lives in the exported Doc/HTML) ---
+    # One tab per drafted post so a re-drafted/second post gets its own tab and Doc link.
+    drafts = [d for d in data.draft_posts if d.post is not None]
+    export = data.draft_export
+    export_items = export.items if export is not None else []
+    for index, draft in enumerate(drafts):
+        post = draft.post
         rows = [
             ["Title", post.title],
             ["Target keyword", _cell(post.target_keyword)],
             ["Title tag", _cell(post.title_tag)],
             ["Meta description", _cell(post.meta_description)],
         ]
-        doc_url = data.draft_export.doc_url if data.draft_export is not None else None
+        # Match this draft's exported Doc by keyword, then by position; fall back to the
+        # top-level doc_url for legacy single-draft exports that have no per-item list.
+        doc_url = None
+        if draft.selected_keyword:
+            doc_url = next(
+                (i.doc_url for i in export_items if i.selected_keyword == draft.selected_keyword),
+                None,
+            )
+        if doc_url is None and index < len(export_items):
+            doc_url = export_items[index].doc_url
+        if doc_url is None and index == 0 and export is not None:
+            doc_url = export.doc_url
         if doc_url:
             # Escape any double-quote so a stray quote can't break out of the formula string.
             safe_url = doc_url.replace('"', "%22")
             rows.append(["Document", f'=HYPERLINK("{safe_url}", "Open draft")'])
-        tabs.append(SheetTab("Draft Post", rows))
+        name = "Draft Post" if index == 0 else f"Draft Post {index + 1}"
+        tabs.append(SheetTab(name, rows))
 
     # Polish applied uniformly: auto-size every tab's columns, and stripe the
     # data rows of the table tabs (those with a header row).

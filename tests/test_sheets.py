@@ -116,6 +116,28 @@ def test_draft_post_tab_omits_doc_link_when_no_export():
     assert not any("HYPERLINK" in cell for cell in _flatten(draft))
 
 
+def test_one_draft_tab_per_draft_with_matching_doc_links():
+    from compresearch.models import DraftExportResult, DraftExportItem
+    data = _full_jobdata()
+    data.draft_posts = [
+        DraftPostResult(post=DraftPost(title="What is a CRM?", body_markdown="a"),
+                        selected_keyword="what is a crm"),
+        DraftPostResult(post=DraftPost(title="CRM Pricing", body_markdown="b"),
+                        selected_keyword="crm pricing"),
+    ]
+    data.draft_export = DraftExportResult(items=[
+        DraftExportItem(selected_keyword="what is a crm", doc_url="https://docs.google.com/document/d/D1/edit"),
+        DraftExportItem(selected_keyword="crm pricing", doc_url="https://docs.google.com/document/d/D2/edit"),
+    ])
+
+    tabs = {t.name: t for t in build_sheet_model(data)}
+    assert "Draft Post" in tabs and "Draft Post 2" in tabs
+    # each tab links to its own Doc, matched by keyword
+    assert any("D1/edit" in c for c in _flatten(tabs["Draft Post"]))
+    assert any("D2/edit" in c for c in _flatten(tabs["Draft Post 2"]))
+    assert "CRM Pricing" in _flatten(tabs["Draft Post 2"])
+
+
 from compresearch.sheets import run_sheet, GoogleSheetWriter
 from compresearch.job_store import create_job, load_data, save_data
 import pytest

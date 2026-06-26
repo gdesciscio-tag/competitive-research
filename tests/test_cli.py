@@ -249,3 +249,40 @@ def test_run_from_args_draft_export_writes_html_and_records_doc(tmp_path):
     reloaded = load_data(job_dir)
     assert reloaded.draft_export.doc_url.endswith("/edit")
     assert reloaded.draft_export.html_path.endswith("acme-co-draft.html")
+
+
+def test_refresh_outputs_subcommand_rebuilds_all_outputs(tmp_path):
+    from compresearch.models import JobConfig, JobData, DraftPostResult, DraftPost
+
+    cfg = JobConfig(client_name="Acme Co", client_url="https://acme.com")
+    job_dir = create_job(cfg, jobs_dir=tmp_path)
+    # two drafted posts already on the job (e.g. after drafting a second one)
+    data = JobData(config=cfg, draft_posts=[
+        DraftPostResult(post=DraftPost(title="What is a CRM?", body_markdown="# A\n\nOne."),
+                        selected_keyword="what is a crm"),
+        DraftPostResult(post=DraftPost(title="CRM Pricing", body_markdown="# B\n\nTwo."),
+                        selected_keyword="crm pricing"),
+    ])
+    save_data(job_dir, data)
+
+    def html_to_pdf(html, output_path):
+        from pathlib import Path as _P
+        _P(output_path).write_text("PDF", encoding="utf-8")
+
+    def sheet_writer(title, tabs):
+        return "https://docs.google.com/spreadsheets/d/FAKE"
+
+    def doc_writer(title, html):
+        return "https://docs.google.com/document/d/DOC/edit"
+
+    returned = run_from_args(
+        ["refresh-outputs", "--job-dir", str(job_dir)],
+        html_to_pdf=html_to_pdf, sheet_writer=sheet_writer, doc_writer=doc_writer,
+    )
+    assert returned == job_dir
+    data = load_data(job_dir)
+    # both drafts exported, PDF + Sheet rebuilt
+    assert len(data.draft_export.items) == 2
+    assert (job_dir / "outputs" / "acme-co-draft-2.html").exists()
+    assert data.render.pdf_path.endswith(".pdf")
+    assert data.sheet.sheet_url.endswith("FAKE")

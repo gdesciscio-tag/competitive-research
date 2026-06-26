@@ -170,6 +170,45 @@ def test_run_draft_export_partial_when_doc_writer_fails(tmp_path):
     assert "drive unavailable" in data.draft_export.error
 
 
+def test_run_draft_export_exports_every_draft(tmp_path):
+    from compresearch.draft_export import run_draft_export
+
+    cfg = JobConfig(client_name="Acme Co", client_url="https://acme.com")
+    job_dir = create_job(cfg, jobs_dir=tmp_path)
+    second = DraftPost(title="CRM Pricing", target_keyword="crm pricing",
+                       body_markdown="## Pricing\n\nIt depends.")
+    data = JobData(config=cfg, draft_posts=[
+        DraftPostResult(post=_post(), selected_keyword="video sales letter"),
+        DraftPostResult(post=second, selected_keyword="crm pricing"),
+    ])
+    save_data(job_dir, data)
+
+    titles = []
+
+    def fake_doc_writer(title, html):
+        titles.append(title)
+        return f"https://docs.google.com/document/d/DOC{len(titles)}/edit"
+
+    run_draft_export(job_dir, doc_writer=fake_doc_writer)
+
+    data = load_data(job_dir)
+    items = data.draft_export.items
+    assert len(items) == 2
+    # first draft keeps the stable name; the second gets a -2 suffix
+    assert items[0].html_path.endswith("acme-co-draft.html")
+    assert items[1].html_path.endswith("acme-co-draft-2.html")
+    assert (job_dir / "outputs" / "acme-co-draft.html").exists()
+    assert (job_dir / "outputs" / "acme-co-draft-2.html").exists()
+    # each draft gets its own Doc, keyed back to the topic
+    assert items[0].selected_keyword == "video sales letter"
+    assert items[1].selected_keyword == "crm pricing"
+    assert items[0].doc_url != items[1].doc_url
+    # multiple drafts -> Doc titles disambiguated by post title
+    assert titles == ["Acme Co — Draft Post: What Is a VSL?", "Acme Co — Draft Post: CRM Pricing"]
+    # top-level fields mirror the first draft for legacy callers
+    assert data.draft_export.html_path.endswith("acme-co-draft.html")
+
+
 def test_run_draft_export_graceful_when_no_draft(tmp_path):
     from compresearch.draft_export import run_draft_export
 

@@ -109,6 +109,27 @@ The result (SEO title, meta description, heading outline, full body in Markdown,
 suggested internal links) is written to `data.json` under `draft_post`. The default
 model is `claude-opus-4-8`.
 
+**Drafting another post afterward:** the full `run-job` drafts one post (the highest-volume
+article). To draft an additional post, run `draft-post` again against the same job with a
+different `--keyword`. Each new keyword is **kept alongside** the existing drafts (re-running
+the *same* keyword re-rolls that one in place). All drafts are stored under `draft_posts` in
+`data.json`. After drafting more posts, run `refresh-outputs` (below) so the PDF, Google
+Sheet, and exported drafts include them.
+
+## Refresh the outputs after re-drafting
+
+The draft step only updates `data.json`. To regenerate the deliverables (export every draft
+to HTML + a Google Doc, rebuild the branded PDF, and rebuild the Google Sheet) so they reflect
+all current drafts, run:
+
+```
+.venv\Scripts\python -m compresearch.cli refresh-outputs --job-dir jobs\acme-co
+```
+
+The first draft keeps the stable `<slug>-draft.html` name; additional drafts get `-2`, `-3`, …
+The PDF gains a numbered "Sample Blog Post" section per draft, and the Sheet gains a
+"Draft Post" tab per draft (each linking to its own Doc).
+
 ## Render the branded PDF report
 
 The render module turns a job's finished `data.json` into a branded TAG Online PDF report.
