@@ -189,6 +189,11 @@ class DraftExportResult(BaseModel):
     error: str | None = None        # set when even HTML could not be written
 
 
+class DashboardResult(BaseModel):
+    html_path: str | None = None   # local outputs/<slug>-dashboard.html
+    error: str | None = None
+
+
 class StepResult(BaseModel):
     name: str
     status: str  # "ok" | "partial" | "failed"
@@ -236,6 +241,7 @@ class JobData(BaseModel):
     draft_export: DraftExportResult | None = None
     render: RenderResult | None = None
     sheet: SheetResult | None = None
+    dashboard: DashboardResult | None = None
     run_report: RunReport | None = None
 
     @model_validator(mode="after")
