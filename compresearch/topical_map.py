@@ -160,6 +160,19 @@ def _gather_topical_inputs(
     )
 
 
+def _map_has_article_ideas(topical_map: TopicalMap) -> bool:
+    """True when the map contains at least one concrete article idea.
+
+    A map with no pillars — or pillars/clusters that bottom out with no articles —
+    gives the downstream draft step nothing to work with, so it is treated as a
+    failed generation rather than a cached success."""
+    return any(
+        cluster.articles
+        for pillar in topical_map.pillars
+        for cluster in pillar.clusters
+    )
+
+
 def run_topical_map(job_dir: Path, generator: Generator | None = None, force: bool = False) -> JobData:
     """Generate a topical map for a job and persist it to data.json.
 
@@ -189,7 +202,18 @@ def run_topical_map(job_dir: Path, generator: Generator | None = None, force: bo
     model = getattr(generator, "model", None)
     try:
         topical_map = generator(prompt)
-        data.topical_map = TopicalMapResult(map=topical_map, model=model)
+        if not _map_has_article_ideas(topical_map):
+            # An empty map satisfies `map is not None and error is None`, so without this
+            # guard the orchestrator's cache check would mark the step complete and a plain
+            # `run-job --job-dir <dir>` resume would NOT regenerate it. Recording it as a
+            # failure instead keeps the pipeline resilient and lets resume retry it.
+            logging.warning(
+                "Topical map for %s came back empty (no article ideas); recording as failed",
+                data.config.client_url,
+            )
+            data.topical_map = TopicalMapResult(model=model, error="Topical map came back empty")
+        else:
+            data.topical_map = TopicalMapResult(map=topical_map, model=model)
     except Exception as exc:
         logging.warning("Topical map generation failed for %s: %s", data.config.client_url, exc)
         data.topical_map = TopicalMapResult(model=model, error=str(exc))

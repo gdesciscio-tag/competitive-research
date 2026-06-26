@@ -102,6 +102,34 @@ def test_run_topical_map_captures_generator_error(tmp_path, make_fake_generator)
     assert data.topical_map.model == "fake-model"
 
 
+def test_run_topical_map_treats_empty_map_as_failure(tmp_path, make_fake_generator):
+    # A generator that returns a map with zero pillars is a failed run, not a success:
+    # storing the empty map would mark the step "complete" and let the broken result
+    # flow into draft_post (which then fails with "No topical-map article available").
+    job_dir = _seed_job(tmp_path)
+    captured = []
+    run_topical_map(job_dir, generator=make_fake_generator(captured, result=TopicalMap(pillars=[])))
+    data = load_data(job_dir)
+    assert data.topical_map is not None
+    assert data.topical_map.map is None          # the empty map is not stored
+    assert data.topical_map.error is not None     # reported as failed so resume retries it
+    assert data.topical_map.model == "fake-model"
+
+
+def test_run_topical_map_treats_articleless_map_as_failure(tmp_path, make_fake_generator):
+    # Pillars/clusters present but no article ideas anywhere is just as useless to the
+    # downstream draft step, so it is also treated as a failure.
+    job_dir = _seed_job(tmp_path)
+    fake_map = TopicalMap(pillars=[
+        PillarTopic(name="CRM Basics", clusters=[TopicCluster(name="Getting started", articles=[])]),
+    ])
+    captured = []
+    run_topical_map(job_dir, generator=make_fake_generator(captured, result=fake_map))
+    data = load_data(job_dir)
+    assert data.topical_map.map is None
+    assert data.topical_map.error is not None
+
+
 def test_generator_raises_when_parsed_output_is_none():
     class _Resp:
         parsed_output = None
@@ -125,7 +153,11 @@ def test_generator_raises_when_parsed_output_is_none():
 def test_run_topical_map_with_no_prior_modules_warns_and_persists(tmp_path, caplog, make_fake_generator):
     cfg = JobConfig(client_name="Acme Co", client_url="https://acme.com")
     job_dir = create_job(cfg, jobs_dir=tmp_path)
-    fake_map = TopicalMap(pillars=[])
+    fake_map = TopicalMap(pillars=[PillarTopic(
+        name="CRM Basics",
+        clusters=[TopicCluster(name="Getting started", articles=[
+            ArticleIdea(title="What is a CRM?")])],
+    )])
     captured = []
     with caplog.at_level(logging.WARNING):
         run_topical_map(job_dir, generator=make_fake_generator(captured, result=fake_map))
@@ -207,6 +239,9 @@ def test_run_topical_map_force_recomputes(tmp_path, make_fake_generator):
     data = load_data(job_dir)
     data.topical_map = TopicalMapResult(map=TopicalMap(pillars=[PillarTopic(name="Old")]), model="cached")
     save_data(job_dir, data)
-    new_map = TopicalMap(pillars=[PillarTopic(name="New")])
+    new_map = TopicalMap(pillars=[PillarTopic(
+        name="New",
+        clusters=[TopicCluster(name="C", articles=[ArticleIdea(title="A")])],
+    )])
     run_topical_map(job_dir, generator=make_fake_generator([], result=new_map), force=True)
     assert load_data(job_dir).topical_map.map.pillars[0].name == "New"
