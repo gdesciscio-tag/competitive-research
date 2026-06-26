@@ -25,8 +25,10 @@ def _full_jobdata():
         config=JobConfig(client_name="Acme Co", client_url="https://acme.com",
                          competitor_urls=["https://rival.com"]),
         sitemap=SitemapResult(
-            client=DomainSitemap(domain="https://acme.com", total_urls=30),
-            competitors=[DomainSitemap(domain="https://rival.com", total_urls=120)],
+            client=DomainSitemap(domain="https://acme.com", total_urls=30,
+                                 section_counts={"blog": 20, "services": 10}),
+            competitors=[DomainSitemap(domain="https://rival.com", total_urls=120,
+                                       section_counts={"blog": 100, "case-studies": 20})],
             gaps=[SitemapGap(section="case-studies", competitors_with=["https://rival.com"])],
         ),
         keywords=KeywordResult(
@@ -66,6 +68,9 @@ def test_build_dashboard_context_shape_and_completeness():
     assert ctx["quick_wins"][0]["url"] == "https://acme.com/crm"
     # per-domain keyword tables: client + 1 competitor
     assert [d["domain"] for d in ctx["domain_keywords"]] == ["acme.com", "rival.com"]
+    # per-domain sitemap section breakdowns, sorted by count desc
+    assert [d["domain"] for d in ctx["sitemap"]["domains"]] == ["acme.com", "rival.com"]
+    assert ctx["sitemap"]["domains"][0]["sections"][0] == {"section": "blog", "count": 20}
     assert ctx["provided"][0]["keyword"] == "best crm"
     assert ctx["topical_map"]["pillars"][0].name == "CRM Basics"
     # draft body markdown rendered to HTML
@@ -96,6 +101,13 @@ def test_render_dashboard_html_contains_sections_and_is_self_contained():
     # tabs rendered
     assert 'data-tab="keywords"' in html
     assert 'data-tab="domains"' in html
+    assert 'data-tab="sitemap"' in html             # per-domain sitemap tab
+    # sub-tabbed navigation for keywords-by-domain and sitemap
+    assert 'data-subtab="kwdom1"' in html and 'data-subpanel="kwdom1"' in html
+    assert 'data-subtab="smdom1"' in html and 'data-subpanel="smdom1"' in html
+    assert "services" in html                        # a client sitemap section
+    # logo fallback path (default Branding has no logo) renders the agency name
+    assert "TAG Online" in html
     # filter inputs on both the keyword-gap table and the per-domain tables
     assert 'data-filter="kwgap"' in html and 'data-rows="kwgap"' in html
     assert 'data-filter="dom1"' in html and 'data-rows="dom1"' in html

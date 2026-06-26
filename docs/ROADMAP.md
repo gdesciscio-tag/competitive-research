@@ -30,16 +30,17 @@ _Last updated: 2026-06-26._
 - [x] Location-page slug detection — root-level pages sharing a hyphen prefix surface as a `<prefix>-*` section instead of vanishing into "(individual pages)"
 - [x] Client-facing dashboard — single self-contained, branded interactive HTML (tabs, sortable/filterable tables) built from data.json, written to outputs/
 
+- [x] Live verification — full `run-job` exercised against the real DataForSEO API, Google Sheets, Google Docs, and Claude on the ATS Hire job (2026-06-26); all external paths work end to end.
+
 ---
 
-## Next — live verification
+## Next — technical follow-ups
 
-The code is fully tested offline; these paths are built but not yet exercised against the real services:
-
-- [ ] **DataForSEO (API keyword mode)** — first live run is the shakedown; any response-shape
-  mismatch is an isolated fix in `keywords.parse_ranked_keywords`.
-- [ ] **Google Sheets writer** — first live run; a gspread signature difference would be a one-line
-  fix in `sheets.GoogleSheetWriter.__call__`.
+- [ ] **Treat an empty topical map as a failure.** `run_topical_map` currently records success
+  when the LLM returns a map with zero pillars/articles, so the step shows OK, the cache treats
+  it as complete, and the downstream draft step fails with "No topical-map article available to
+  draft" (seen on a real ATS Hire run). It should set `TopicalMapResult.error` on an empty map so
+  the step reports failed and a plain `run-job --job-dir` resume retries it automatically.
 
 ---
 

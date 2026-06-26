@@ -20,17 +20,24 @@ def build_dashboard_context(data: JobData, branding: Branding, report_date: str 
     sorting."""
     config = data.config
 
+    def _domain_entry(dom) -> dict:
+        return {
+            "domain": short_domain(dom.domain),
+            "total": dom.total_urls,
+            "posts_per_month": dom.posts_per_month,
+            "sections": sorted(
+                ({"section": name, "count": count} for name, count in dom.section_counts.items()),
+                key=lambda s: s["count"], reverse=True,
+            ),
+        }
+
     sitemap_domains: list[dict] = []
     sitemap_gaps: list[dict] = []
     if data.sitemap is not None:
         if data.sitemap.client is not None:
-            sitemap_domains.append({"domain": short_domain(data.sitemap.client.domain),
-                                    "total": data.sitemap.client.total_urls,
-                                    "posts_per_month": data.sitemap.client.posts_per_month})
+            sitemap_domains.append(_domain_entry(data.sitemap.client))
         for comp in data.sitemap.competitors:
-            sitemap_domains.append({"domain": short_domain(comp.domain),
-                                    "total": comp.total_urls,
-                                    "posts_per_month": comp.posts_per_month})
+            sitemap_domains.append(_domain_entry(comp))
         sitemap_gaps = [{"section": g.section,
                          "competitors": [short_domain(d) for d in g.competitors_with]}
                         for g in data.sitemap.gaps]

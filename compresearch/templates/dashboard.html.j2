@@ -29,10 +29,17 @@ h2{font-size:16px;color:{{ branding.primary_color }};}
 a{color:{{ branding.accent_color }};}
 .chart{margin:8px 0 16px;}
 ul.links{padding-left:18px;}
+.logo-chip{background:#fff;border-radius:8px;padding:8px 12px;display:inline-flex;align-items:center;}
+.subtabs{display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 14px;}
+.subtab{font-size:12px;padding:5px 12px;border:1px solid #d8dee5;background:#fff;border-radius:14px;cursor:pointer;color:{{ branding.muted_color }};}
+.subtab.active{background:{{ branding.primary_color }};border-color:{{ branding.primary_color }};color:#fff;}
+.subpanel{display:none;}
+.subpanel.active{display:block;}
+.domain-meta{font-size:12px;color:{{ branding.muted_color }};margin:0 0 10px;}
 </style></head><body>
 <div class="wrap">
   <div class="header">
-    <div>{{ logo_html|safe if logo_html else branding.agency_name }}</div>
+    {% if logo_html %}<div class="logo-chip">{{ logo_html|safe }}</div>{% else %}<div style="font-weight:600;font-size:18px;">{{ branding.agency_name }}</div>{% endif %}
     <div style="flex:1">
       <h1>{{ client_name }} — competitive research</h1>
       <div class="sub">Prepared by {{ branding.agency_name }}{% if report_date %} · {{ report_date }}{% endif %} · vs {{ summary.competitor_count }} competitors</div>
@@ -48,6 +55,7 @@ ul.links{padding-left:18px;}
     </div>
     <div class="tabs" role="tablist">
       <button class="tab active" data-tab="overview">Overview</button>
+      {% if sitemap.domains %}<button class="tab" data-tab="sitemap">Sitemap</button>{% endif %}
       {% if sitemap.gaps %}<button class="tab" data-tab="content">Content gaps</button>{% endif %}
       {% if keyword_gaps %}<button class="tab" data-tab="keywords">Keyword gaps</button>{% endif %}
       {% if quick_wins %}<button class="tab" data-tab="wins">Quick wins</button>{% endif %}
@@ -62,6 +70,24 @@ ul.links{padding-left:18px;}
       {% if keyword_counts_svg %}<h2>Ranking keywords by domain</h2><div class="chart">{{ keyword_counts_svg|safe }}</div>{% endif %}
       {% if not content_volume_svg and not keyword_counts_svg %}<p class="muted">No analysis data available yet.</p>{% endif %}
     </div>
+
+    {% if sitemap.domains %}
+    <div class="panel" data-panel="sitemap">
+      <div class="subtabs">
+        {% for dm in sitemap.domains %}<button class="subtab{% if loop.first %} active{% endif %}" data-subtab="smdom{{ loop.index }}">{{ dm.domain }}</button>{% endfor %}
+      </div>
+      {% for dm in sitemap.domains %}
+      <div class="subpanel{% if loop.first %} active{% endif %}" data-subpanel="smdom{{ loop.index }}">
+        <p class="domain-meta">{{ dm.total }} pages{% if dm.posts_per_month is not none %} · ~{{ dm.posts_per_month }} posts/month{% endif %}</p>
+        {% if dm.sections %}
+        <table data-sortable><thead><tr><th>Section</th><th class="num" data-num>Pages</th></tr></thead><tbody>
+        {% for s in dm.sections %}<tr><td>{{ s.section }}</td><td class="num">{{ s.count }}</td></tr>{% endfor %}
+        </tbody></table>
+        {% else %}<p class="muted">No section breakdown available for this domain.</p>{% endif %}
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
 
     {% if sitemap.gaps %}
     <div class="panel" data-panel="content">
@@ -104,16 +130,21 @@ ul.links{padding-left:18px;}
 
     {% if domain_keywords %}
     <div class="panel" data-panel="domains">
+      <div class="subtabs">
+        {% for dk in domain_keywords %}<button class="subtab{% if loop.first %} active{% endif %}" data-subtab="kwdom{{ loop.index }}">{{ dk.domain }}</button>{% endfor %}
+      </div>
       {% for dk in domain_keywords %}
-      <h2>{{ dk.domain }} <span class="muted">({{ dk.keywords|length }} keywords)</span></h2>
-      <input class="filter" type="text" placeholder="Filter {{ dk.domain }} keywords..." data-filter="dom{{ loop.index }}">
-      <table data-sortable><thead><tr><th>Keyword</th><th class="num" data-num>Volume</th><th class="num" data-num>Difficulty</th><th class="num" data-num>Position</th></tr></thead><tbody data-rows="dom{{ loop.index }}">
-      {% for e in dk.keywords %}<tr>
-        <td>{{ e.keyword }}</td>
-        <td class="num">{{ e.volume if e.volume is not none else '—' }}</td>
-        <td class="num">{{ e.difficulty if e.difficulty is not none else '—' }}</td>
-        <td class="num">{{ e.position if e.position is not none else '—' }}</td></tr>{% endfor %}
-      </tbody></table>
+      <div class="subpanel{% if loop.first %} active{% endif %}" data-subpanel="kwdom{{ loop.index }}">
+        <p class="domain-meta">{{ dk.keywords|length }} ranking keywords</p>
+        <input class="filter" type="text" placeholder="Filter {{ dk.domain }} keywords..." data-filter="dom{{ loop.index }}">
+        <table data-sortable><thead><tr><th>Keyword</th><th class="num" data-num>Volume</th><th class="num" data-num>Difficulty</th><th class="num" data-num>Position</th></tr></thead><tbody data-rows="dom{{ loop.index }}">
+        {% for e in dk.keywords %}<tr>
+          <td>{{ e.keyword }}</td>
+          <td class="num">{{ e.volume if e.volume is not none else '—' }}</td>
+          <td class="num">{{ e.difficulty if e.difficulty is not none else '—' }}</td>
+          <td class="num">{{ e.position if e.position is not none else '—' }}</td></tr>{% endfor %}
+        </tbody></table>
+      </div>
       {% endfor %}
     </div>
     {% endif %}
@@ -174,6 +205,15 @@ ul.links{padding-left:18px;}
       if(!body)return;
       Array.prototype.forEach.call(body.rows,function(r){
         r.style.display=r.cells[0].textContent.toLowerCase().indexOf(q)>-1?'':'none';
+      });
+    });
+  });
+  document.querySelectorAll('.subtab').forEach(function(b){
+    b.addEventListener('click',function(){
+      var panel=b.closest('.panel');
+      b.parentNode.querySelectorAll('.subtab').forEach(function(x){x.classList.toggle('active',x===b);});
+      panel.querySelectorAll('.subpanel').forEach(function(p){
+        p.classList.toggle('active',p.getAttribute('data-subpanel')===b.getAttribute('data-subtab'));
       });
     });
   });
