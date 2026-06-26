@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ client_name }} — competitive research</title>
+<style>
+body{font-family:{{ branding.font_family }};color:{{ branding.text_color }};margin:0;background:#f5f7fa;}
+.wrap{max-width:1000px;margin:0 auto;padding:24px;}
+.header{background:{{ branding.primary_color }};color:#fff;border-radius:10px 10px 0 0;padding:20px 24px;display:flex;align-items:center;gap:16px;}
+.header h1{font-size:20px;margin:0;font-weight:600;}
+.header .sub{color:#c2cdda;font-size:13px;margin-top:2px;}
+.panelwrap{background:#fff;border:1px solid #e4e7eb;border-top:none;border-radius:0 0 10px 10px;padding:20px 24px;}
+.cards{display:flex;flex-wrap:wrap;gap:12px;margin-bottom:16px;}
+.card{flex:1;min-width:120px;background:#f5f7fa;border-radius:8px;padding:12px;}
+.card .label{font-size:12px;color:{{ branding.muted_color }};}
+.card .value{font-size:26px;font-weight:600;}
+.tabs{display:flex;flex-wrap:wrap;gap:4px;border-bottom:2px solid #e4e7eb;margin-bottom:16px;}
+.tab{font-size:13px;padding:8px 14px;border:none;background:none;cursor:pointer;color:{{ branding.muted_color }};border-bottom:2px solid transparent;margin-bottom:-2px;}
+.tab.active{color:{{ branding.primary_color }};border-bottom-color:{{ branding.accent_color }};font-weight:600;}
+.panel{display:none;}
+.panel.active{display:block;}
+table{width:100%;border-collapse:collapse;font-size:13px;}
+th,td{padding:8px 10px;border-bottom:1px solid #eef1f4;text-align:left;}
+th{color:{{ branding.muted_color }};cursor:pointer;white-space:nowrap;}
+td.num,th.num{text-align:right;}
+input.filter{width:100%;padding:8px 10px;margin-bottom:10px;border:1px solid #d8dee5;border-radius:6px;font-size:13px;}
+.muted{color:{{ branding.muted_color }};font-size:12px;}
+h2{font-size:16px;color:{{ branding.primary_color }};}
+.draft{border:1px solid #e4e7eb;border-radius:8px;padding:16px;margin-bottom:14px;}
+a{color:{{ branding.accent_color }};}
+.chart{margin:8px 0 16px;}
+ul.links{padding-left:18px;}
+</style></head><body>
+<div class="wrap">
+  <div class="header">
+    <div>{{ logo_html|safe if logo_html else branding.agency_name }}</div>
+    <div style="flex:1">
+      <h1>{{ client_name }} — competitive research</h1>
+      <div class="sub">Prepared by {{ branding.agency_name }}{% if report_date %} · {{ report_date }}{% endif %} · vs {{ summary.competitor_count }} competitors</div>
+    </div>
+  </div>
+  <div class="panelwrap">
+    {% if summary.is_partial %}<div class="muted" style="margin-bottom:12px;">Note: some data could not be fully retrieved; this dashboard reflects what was available.</div>{% endif %}
+    <div class="cards">
+      <div class="card"><div class="label">Competitors</div><div class="value">{{ summary.competitor_count }}</div></div>
+      <div class="card"><div class="label">Content gaps</div><div class="value">{{ summary.content_gap_count }}</div></div>
+      <div class="card"><div class="label">Keyword gaps</div><div class="value">{{ summary.keyword_gap_count }}</div></div>
+      <div class="card"><div class="label">Quick wins</div><div class="value">{{ summary.quick_win_count }}</div></div>
+    </div>
+    <div class="tabs" role="tablist">
+      <button class="tab active" data-tab="overview">Overview</button>
+      {% if sitemap.gaps %}<button class="tab" data-tab="content">Content gaps</button>{% endif %}
+      {% if keyword_gaps %}<button class="tab" data-tab="keywords">Keyword gaps</button>{% endif %}
+      {% if quick_wins %}<button class="tab" data-tab="wins">Quick wins</button>{% endif %}
+      {% if domain_keywords %}<button class="tab" data-tab="domains">Keywords by domain</button>{% endif %}
+      {% if topical_map.pillars %}<button class="tab" data-tab="map">Topical map</button>{% endif %}
+      {% if drafts %}<button class="tab" data-tab="drafts">Draft posts</button>{% endif %}
+      {% if provided %}<button class="tab" data-tab="provided">Client keywords</button>{% endif %}
+    </div>
+
+    <div class="panel active" data-panel="overview">
+      {% if content_volume_svg %}<h2>Published pages by domain</h2><div class="chart">{{ content_volume_svg|safe }}</div>{% endif %}
+      {% if keyword_counts_svg %}<h2>Ranking keywords by domain</h2><div class="chart">{{ keyword_counts_svg|safe }}</div>{% endif %}
+      {% if not content_volume_svg and not keyword_counts_svg %}<p class="muted">No analysis data available yet.</p>{% endif %}
+    </div>
+
+    {% if sitemap.gaps %}
+    <div class="panel" data-panel="content">
+      <p class="muted">Content sections competitors publish that {{ client_name }} has none of.</p>
+      <table data-sortable><thead><tr><th>Section</th><th>Competitors</th></tr></thead><tbody>
+      {% for g in sitemap.gaps %}<tr><td>{{ g.section }}</td><td>{{ g.competitors|join(', ') }}</td></tr>{% endfor %}
+      </tbody></table>
+    </div>
+    {% endif %}
+
+    {% if keyword_gaps %}
+    <div class="panel" data-panel="keywords">
+      <input class="filter" type="text" placeholder="Filter keywords..." data-filter="kwgap">
+      <table data-sortable><thead><tr>
+        <th>Keyword</th><th class="num" data-num>Volume</th><th class="num" data-num>Difficulty</th>
+        <th class="num" data-num>Traffic value</th><th class="num" data-num>Best comp. pos.</th><th>Competitors</th>
+      </tr></thead><tbody data-rows="kwgap">
+      {% for g in keyword_gaps %}<tr>
+        <td>{{ g.keyword }}</td>
+        <td class="num">{{ g.volume if g.volume is not none else '—' }}</td>
+        <td class="num">{{ g.difficulty if g.difficulty is not none else '—' }}</td>
+        <td class="num">{{ '%.0f'|format(g.traffic_value) if g.traffic_value is not none else '—' }}</td>
+        <td class="num">{{ g.best_position if g.best_position is not none else '—' }}</td>
+        <td>{{ g.competitors|join(', ') }}</td></tr>{% endfor %}
+      </tbody></table>
+    </div>
+    {% endif %}
+
+    {% if quick_wins %}
+    <div class="panel" data-panel="wins">
+      <table data-sortable><thead><tr><th>Keyword</th><th class="num" data-num>Position</th><th class="num" data-num>Volume</th><th class="num" data-num>Traffic value</th></tr></thead><tbody>
+      {% for w in quick_wins %}<tr>
+        <td>{% if w.url %}<a href="{{ w.url }}">{{ w.keyword }}</a>{% else %}{{ w.keyword }}{% endif %}</td>
+        <td class="num">{{ w.position }}</td>
+        <td class="num">{{ w.volume if w.volume is not none else '—' }}</td>
+        <td class="num">{{ '%.0f'|format(w.traffic_value) if w.traffic_value is not none else '—' }}</td></tr>{% endfor %}
+      </tbody></table>
+    </div>
+    {% endif %}
+
+    {% if domain_keywords %}
+    <div class="panel" data-panel="domains">
+      {% for dk in domain_keywords %}
+      <h2>{{ dk.domain }} <span class="muted">({{ dk.keywords|length }} keywords)</span></h2>
+      <table data-sortable><thead><tr><th>Keyword</th><th class="num" data-num>Volume</th><th class="num" data-num>Difficulty</th><th class="num" data-num>Position</th></tr></thead><tbody>
+      {% for e in dk.keywords %}<tr>
+        <td>{{ e.keyword }}</td>
+        <td class="num">{{ e.volume if e.volume is not none else '—' }}</td>
+        <td class="num">{{ e.difficulty if e.difficulty is not none else '—' }}</td>
+        <td class="num">{{ e.position if e.position is not none else '—' }}</td></tr>{% endfor %}
+      </tbody></table>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    {% if topical_map.pillars %}
+    <div class="panel" data-panel="map">
+      {% if topical_map.summary %}<p class="muted">{{ topical_map.summary }}</p>{% endif %}
+      {% for pillar in topical_map.pillars %}
+      <h2>{{ pillar.name }}</h2>
+      {% for cluster in pillar.clusters %}
+      <div class="muted" style="margin:6px 0 2px;">{{ cluster.name }}</div>
+      <ul>{% for a in cluster.articles %}<li>{{ a.title }}{% if a.target_keyword %} <span class="muted">· {{ a.target_keyword }}</span>{% endif %}</li>{% endfor %}</ul>
+      {% endfor %}
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    {% if drafts %}
+    <div class="panel" data-panel="drafts">
+      {% for d in drafts %}
+      <div class="draft">
+        <h2 style="margin-top:0;">{{ d.title }}</h2>
+        <div class="muted">{% if d.target_keyword %}Target keyword: {{ d.target_keyword }}{% endif %}{% if d.word_count %} · {{ d.word_count }} words{% endif %}</div>
+        {% if d.meta_description %}<div class="muted" style="margin:6px 0;">{{ d.meta_description }}</div>{% endif %}
+        <div>{{ d.body_html|safe }}</div>
+        {% if d.internal_links %}<h3>Suggested internal links</h3><ul class="links">{% for l in d.internal_links %}<li>{{ l.anchor }} → {{ l.url }}</li>{% endfor %}</ul>{% endif %}
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    {% if provided %}
+    <div class="panel" data-panel="provided">
+      <table data-sortable><thead><tr><th>Keyword</th><th class="num" data-num>Volume</th><th class="num" data-num>Difficulty</th><th class="num" data-num>Client pos.</th><th class="num" data-num>Best comp. pos.</th></tr></thead><tbody>
+      {% for p in provided %}<tr>
+        <td>{{ p.keyword }}</td>
+        <td class="num">{{ p.volume if p.volume is not none else '—' }}</td>
+        <td class="num">{{ p.difficulty if p.difficulty is not none else '—' }}</td>
+        <td class="num">{{ p.client_position if p.client_position is not none else '—' }}</td>
+        <td class="num">{{ p.best_position if p.best_position is not none else '—' }}</td></tr>{% endfor %}
+      </tbody></table>
+    </div>
+    {% endif %}
+  </div>
+  <p class="muted" style="text-align:center;margin-top:14px;">Generated by {{ branding.agency_name }}</p>
+</div>
+<script>
+(function(){
+  var tabs=document.querySelectorAll('.tab'),panels=document.querySelectorAll('.panel');
+  tabs.forEach(function(t){t.addEventListener('click',function(){
+    tabs.forEach(function(x){x.classList.toggle('active',x===t);});
+    panels.forEach(function(p){p.classList.toggle('active',p.getAttribute('data-panel')===t.getAttribute('data-tab'));});
+  });});
+  document.querySelectorAll('input.filter').forEach(function(inp){
+    inp.addEventListener('input',function(){
+      var q=inp.value.toLowerCase();
+      var body=document.querySelector('[data-rows="'+inp.getAttribute('data-filter')+'"]');
+      if(!body)return;
+      Array.prototype.forEach.call(body.rows,function(r){
+        r.style.display=r.cells[0].textContent.toLowerCase().indexOf(q)>-1?'':'none';
+      });
+    });
+  });
+  document.querySelectorAll('table[data-sortable]').forEach(function(tbl){
+    var ths=tbl.tHead.rows[0].cells,asc={};
+    Array.prototype.forEach.call(ths,function(th,i){
+      th.addEventListener('click',function(){
+        asc[i]=!asc[i];
+        var num=th.hasAttribute('data-num'),body=tbl.tBodies[0];
+        var rows=Array.prototype.slice.call(body.rows);
+        rows.sort(function(a,b){
+          var av=a.cells[i].textContent.replace(/[$,—]/g,'').trim();
+          var bv=b.cells[i].textContent.replace(/[$,—]/g,'').trim();
+          var c=num?((parseFloat(av)||0)-(parseFloat(bv)||0)):av.localeCompare(bv);
+          return asc[i]?c:-c;
+        });
+        rows.forEach(function(r){body.appendChild(r);});
+      });
+    });
+  });
+})();
+</script>
+</body></html>

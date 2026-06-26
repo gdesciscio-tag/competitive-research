@@ -1,8 +1,12 @@
 # compresearch/dashboard.py
 from __future__ import annotations
 
+from pathlib import Path
+
+from jinja2 import Environment, FileSystemLoader, select_autoescape
+
 from compresearch.models import Branding, JobData
-from compresearch.render import _bar_chart_svg, _logo_html, markdown_to_html
+from compresearch.render import TEMPLATES_DIR, _bar_chart_svg, _logo_html, markdown_to_html
 from compresearch.utils import short_domain
 
 
@@ -103,3 +107,12 @@ def build_dashboard_context(data: JobData, branding: Branding, report_date: str 
         "topical_map": {"summary": topical_summary, "pillars": pillars},
         "drafts": drafts,
     }
+
+
+def render_dashboard_html(context: dict, templates_dir: Path = TEMPLATES_DIR) -> str:
+    """Render the self-contained dashboard HTML from the context view-model."""
+    env = Environment(
+        loader=FileSystemLoader(str(templates_dir)),
+        autoescape=select_autoescape(["html", "xml"]),
+    )
+    return env.get_template("dashboard.html.j2").render(**context)

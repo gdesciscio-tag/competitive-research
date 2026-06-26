@@ -82,3 +82,30 @@ def test_build_dashboard_context_tolerates_missing_sections():
     assert ctx["domain_keywords"] == []
     assert ctx["topical_map"]["pillars"] == []
     assert ctx["content_volume_svg"] == ""
+
+
+def test_render_dashboard_html_contains_sections_and_is_self_contained():
+    from compresearch.dashboard import build_dashboard_context, render_dashboard_html
+    html = render_dashboard_html(build_dashboard_context(_full_jobdata(), Branding()))
+    # key content present
+    assert "Acme Co" in html
+    assert "free crm" in html                      # keyword gap
+    assert "What is a CRM?" in html                # topical map + draft
+    assert "<strong>helps</strong>" in html        # rendered draft body
+    assert "<svg" in html                          # inline chart
+    # tabs rendered
+    assert 'data-tab="keywords"' in html
+    assert 'data-tab="domains"' in html
+    # self-contained: no external CSS/JS/asset references
+    assert "<link" not in html
+    assert "src=\"http" not in html
+    assert "src='http" not in html
+    assert "cdn" not in html.lower()
+
+
+def test_render_dashboard_html_handles_empty_job():
+    from compresearch.dashboard import build_dashboard_context, render_dashboard_html
+    data = JobData(config=JobConfig(client_name="X", client_url="https://x.com"))
+    html = render_dashboard_html(build_dashboard_context(data, Branding()))
+    assert "X" in html                              # renders without error
+    assert 'data-tab="keywords"' not in html        # absent sections produce no tab
