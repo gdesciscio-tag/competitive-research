@@ -128,6 +128,8 @@ def test_render_dashboard_html_contains_sections_and_is_self_contained():
     # CSS-only animations, with a reduced-motion accessibility guard
     assert "@keyframes" in html
     assert "prefers-reduced-motion" in html
+    # keeps search engines out if the file is ever hosted on staging/prod
+    assert '<meta name="robots" content="noindex, nofollow">' in html
 
 
 def test_render_dashboard_html_handles_empty_job():
