@@ -96,6 +96,9 @@ def test_render_dashboard_html_contains_sections_and_is_self_contained():
     # tabs rendered
     assert 'data-tab="keywords"' in html
     assert 'data-tab="domains"' in html
+    # filter inputs on both the keyword-gap table and the per-domain tables
+    assert 'data-filter="kwgap"' in html and 'data-rows="kwgap"' in html
+    assert 'data-filter="dom1"' in html and 'data-rows="dom1"' in html
     # self-contained: no external CSS/JS/asset references
     assert "<link" not in html
     assert "src=\"http" not in html

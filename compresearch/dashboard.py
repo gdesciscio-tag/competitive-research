@@ -121,7 +121,7 @@ def render_dashboard_html(context: dict, templates_dir: Path = TEMPLATES_DIR) ->
     return env.get_template("dashboard.html.j2").render(**context)
 
 
-def run_dashboard(job_dir, branding: Branding | None = None) -> JobData:
+def run_dashboard(job_dir, branding: Branding | None = None, report_date: str | None = None) -> JobData:
     """Render the client dashboard to a single self-contained HTML file and record its
     path in data.json. Never raises — failures are captured like the other steps."""
     data = load_data(job_dir)
@@ -130,7 +130,7 @@ def run_dashboard(job_dir, branding: Branding | None = None) -> JobData:
     output_path = Path(job_dir) / "outputs" / f"{slug}-dashboard.html"
     output_path.parent.mkdir(parents=True, exist_ok=True)
     try:
-        html = render_dashboard_html(build_dashboard_context(data, branding))
+        html = render_dashboard_html(build_dashboard_context(data, branding, report_date=report_date))
         output_path.write_text(html, encoding="utf-8")
         data.dashboard = DashboardResult(html_path=str(output_path))
     except Exception as exc:

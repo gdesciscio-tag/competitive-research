@@ -54,7 +54,7 @@ ul.links{padding-left:18px;}
       {% if domain_keywords %}<button class="tab" data-tab="domains">Keywords by domain</button>{% endif %}
       {% if topical_map.pillars %}<button class="tab" data-tab="map">Topical map</button>{% endif %}
       {% if drafts %}<button class="tab" data-tab="drafts">Draft posts</button>{% endif %}
-      {% if provided %}<button class="tab" data-tab="provided">Client keywords</button>{% endif %}
+      {% if provided %}<button class="tab" data-tab="provided">Client-provided</button>{% endif %}
     </div>
 
     <div class="panel active" data-panel="overview">
@@ -106,7 +106,8 @@ ul.links{padding-left:18px;}
     <div class="panel" data-panel="domains">
       {% for dk in domain_keywords %}
       <h2>{{ dk.domain }} <span class="muted">({{ dk.keywords|length }} keywords)</span></h2>
-      <table data-sortable><thead><tr><th>Keyword</th><th class="num" data-num>Volume</th><th class="num" data-num>Difficulty</th><th class="num" data-num>Position</th></tr></thead><tbody>
+      <input class="filter" type="text" placeholder="Filter {{ dk.domain }} keywords..." data-filter="dom{{ loop.index }}">
+      <table data-sortable><thead><tr><th>Keyword</th><th class="num" data-num>Volume</th><th class="num" data-num>Difficulty</th><th class="num" data-num>Position</th></tr></thead><tbody data-rows="dom{{ loop.index }}">
       {% for e in dk.keywords %}<tr>
         <td>{{ e.keyword }}</td>
         <td class="num">{{ e.volume if e.volume is not none else '—' }}</td>
