@@ -51,7 +51,8 @@ they include every draft.
 ## Report back
 
 The command prints a per-step summary (which steps succeeded/failed/were skipped as cached),
-the branded PDF path, the shared Google Sheet URL, and the estimated API cost for the job (Claude + DataForSEO).
+the branded PDF path, the shared Google Sheet URL, the client dashboard HTML path, and the
+estimated API cost for the job (Claude + DataForSEO).
 Relay those to the operator. The pipeline is resilient — if one step fails (e.g. a missing
 credential), the others still run and the summary shows exactly what was produced, with a
 `fix:` hint for common credential problems. A full log is saved to `jobs/<slug>/run.log`.

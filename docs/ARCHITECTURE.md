@@ -49,8 +49,9 @@ jobs/<client-slug>/
 ```
 
 `data.json` grows one section per step: `sitemap`, `keywords`, `topical_map`, `draft_post`
-(plus `draft_posts`, the list of every drafted post), `draft_export`, `render`, `sheet`, and a
-`run_report` (per-step status + cost). All defined as pydantic models in `compresearch/models.py`.
+(plus `draft_posts`, the list of every drafted post), `draft_export`, `render`, `sheet`,
+`dashboard`, and a `run_report` (per-step status + cost). All defined as pydantic models in
+`compresearch/models.py`.
 Each run also appends to a plain-text `run.log` in the job folder.
 
 ---
@@ -67,6 +68,7 @@ Each run also appends to a plain-text `run.log` in the job folder.
 | `topical_map.py` | `run_topical_map` — Claude (Sonnet 4.6) builds pillars → clusters → articles, grounded in the gaps |
 | `draft_post.py` | `run_draft_post` — Claude (Opus 4.8) writes a full SEO post, style-matched, with internal links; `check_draft_quality` flags SEO issues |
 | `draft_export.py` | `run_draft_export` — renders each draft to standalone HTML and a Google Doc |
+| `dashboard.py` | `run_dashboard` — builds the self-contained, branded interactive HTML dashboard from data.json |
 | `render.py` | `run_render` — builds the report HTML (Jinja2) and renders it to PDF via Playwright |
 | `sheets.py` | `run_sheet` — writes the Google Sheet (one tab per section, one per draft) via gspread |
 | `branding.py` | Loads `branding.json` (logo/colors/fonts) over built-in defaults |

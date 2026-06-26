@@ -14,8 +14,8 @@ Copy `.env.example` to `.env` and fill in API keys as modules are added.
 
 ## Run a full job (one command)
 
-Run the entire pipeline — sitemap, keywords, topical map, draft post, branded PDF, and Google
-Sheet — for one client:
+Run the entire pipeline — sitemap, keywords, topical map, draft post, branded PDF, Google
+Sheet, and a self-contained client dashboard — for one client:
 
 ```
 .venv\Scripts\python -m compresearch.cli run-job \
@@ -193,6 +193,19 @@ The sheet module turns a job's finished `data.json` into a shared Google Sheet w
 ```
 
 The shareable URL is recorded in `data.json` under `sheet`.
+
+## Build the client dashboard
+
+Turns a job's finished `data.json` into a single self-contained, branded HTML dashboard the
+client can open in any browser (no server) — the same data as the Sheet, but explorable with
+tabs and sortable/filterable tables.
+
+```
+.venv\Scripts\python -m compresearch.cli dashboard --job-dir jobs\acme-co
+```
+
+The file is written to `jobs\<slug>\outputs\<slug>-dashboard.html` and its path is recorded in
+`data.json` under `dashboard`. It's also produced by the full `run-job` and by `refresh-outputs`.
 
 ## Test
 

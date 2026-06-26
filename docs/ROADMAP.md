@@ -28,6 +28,7 @@ _Last updated: 2026-06-26._
 - [x] DataForSEO per-call cost folded into the run report total (was Claude-only)
 - [x] Standalone CLI commands exit non-zero when a step captured an error (no false "Job complete")
 - [x] Location-page slug detection — root-level pages sharing a hyphen prefix surface as a `<prefix>-*` section instead of vanishing into "(individual pages)"
+- [x] Client-facing dashboard — single self-contained, branded interactive HTML (tabs, sortable/filterable tables) built from data.json, written to outputs/
 
 ---
 
@@ -52,6 +53,6 @@ The code is fully tested offline; these paths are built but not yet exercised ag
 Deliberately deferred — the data is structured to allow these later, but they aren't planned work:
 
 - Full custom web app with auth / DB / queue
-- Client-facing web dashboard or microsite (possible future upsell)
+- Hosted dashboard microsite — a live per-client URL (the local self-contained dashboard ships; hosting/auth/privacy is the deferred part)
 - White-label / per-client branding (branding is currently fixed to TAG Online)
 - Multi-tenant scale concerns
