@@ -5,6 +5,7 @@ import logging
 import time
 from compresearch.costs import estimate_cost
 from compresearch.draft_export import run_draft_export
+from compresearch.dashboard import run_dashboard
 from compresearch.draft_post import ClaudeDraftPostGenerator, run_draft_post
 from compresearch.job_store import load_data, save_data
 from compresearch.keywords import run_keywords
@@ -166,6 +167,15 @@ def _run_pipeline(
         record("sheet", status, err, t)
     except Exception as exc:
         record("sheet", "failed", str(exc), t)
+
+    # 8. Client dashboard (cheap output; always runs so it reflects the latest data)
+    t = time.monotonic()
+    try:
+        run_dashboard(job_dir)
+        status, err = _section_status(job_dir, "dashboard")
+        record("dashboard", status, err, t)
+    except Exception as exc:
+        record("dashboard", "failed", str(exc), t)
 
     total = round(sum(s.cost_usd or 0.0 for s in steps), 4)
     data = load_data(job_dir)

@@ -107,7 +107,7 @@ def test_run_job_runs_all_six_steps_offline(tmp_path):
 
     report = data.run_report
     assert [s.name for s in report.steps] == [
-        "sitemap", "keywords", "topical_map", "draft_post", "draft_export", "render", "sheet",
+        "sitemap", "keywords", "topical_map", "draft_post", "draft_export", "render", "sheet", "dashboard",
     ]
     assert all(s.status == "ok" for s in report.steps), [(s.name, s.status, s.error) for s in report.steps]
     # deliverables produced
@@ -115,6 +115,7 @@ def test_run_job_runs_all_six_steps_offline(tmp_path):
     assert data.sheet.sheet_url.endswith("FAKE")
     assert data.draft_export.html_path.endswith("acme-co-draft.html")
     assert data.draft_export.doc_url.endswith("DOCFAKE/edit")
+    assert data.dashboard.html_path.endswith("acme-co-dashboard.html")
     # the report HTML and sheet flowed through with real data
     assert "Acme Co" in captured["html"]
     # LLM cost captured: sonnet (1M+1M -> wait, 1000+1000) opus (500+2000)
@@ -143,6 +144,7 @@ def test_run_job_skips_cached_steps_on_resume(tmp_path):
     assert statuses["render"] == "ok"
     assert statuses["sheet"] == "ok"
     assert statuses["draft_export"] == "ok"
+    assert statuses["dashboard"] == "ok"
     # nothing recomputed by the LLM on a resume -> no cost
     assert data.run_report.total_cost_usd == 0.0
     # the run was logged to the job's run.log
