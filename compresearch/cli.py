@@ -12,6 +12,7 @@ from compresearch.keywords import run_keywords, Provider
 from compresearch.models import JobConfig
 from compresearch.orchestrator import run_job
 from compresearch.render import run_render, render_pdf
+from compresearch.runlog import job_log, remediation_hint
 from compresearch.sheets import run_sheet
 from compresearch.sitemap import Fetcher, http_fetch, run_sitemap
 from compresearch.topical_map import run_topical_map, Generator
@@ -21,17 +22,34 @@ def _print_run_summary(data) -> None:
     report = data.run_report
     print("\nCompetitive research job complete:")
     for step in report.steps:
-        mark = {"ok": "OK ", "partial": "~~ "}.get(step.status, "XX ")
+        mark = {"ok": "OK ", "partial": "~~ ", "skipped": "-- "}.get(step.status, "XX ")
         line = f"  [{mark}] {step.name}"
         if step.error:
             line += f" — {step.error}"
         print(line)
+        hint = remediation_hint(step.error)
+        if hint:
+            print(f"         fix: {hint}")
     if data.render is not None and data.render.pdf_path:
         print(f"  PDF:   {data.render.pdf_path}")
     if data.sheet is not None and data.sheet.sheet_url:
         print(f"  Sheet: {data.sheet.sheet_url}")
     _print_draft_exports(data)
+    _print_draft_warnings(data)
     print(f"  Estimated LLM cost: ${report.total_cost_usd:.4f}\n")
+
+
+def _print_draft_warnings(data) -> None:
+    """Surface internal SEO/quality flags for each draft (never shown to the client)."""
+    drafts = [d for d in data.draft_posts if d.post is not None and d.warnings]
+    if not drafts:
+        return
+    multiple = len([d for d in data.draft_posts if d.post is not None]) > 1
+    for index, draft in enumerate(drafts, 1):
+        label = f"Draft {index} ({draft.selected_keyword})" if multiple else "Draft"
+        print(f"  {label} quality notes:")
+        for warning in draft.warnings:
+            print(f"    - {warning}")
 
 
 def _print_draft_exports(data) -> None:
@@ -75,16 +93,21 @@ def run_from_args(argv: list[str], fetch: Fetcher = http_fetch, provider=None, g
     sm.add_argument("--client-url", required=True)
     sm.add_argument("--competitors", default="", help="Comma-separated competitor URLs")
     sm.add_argument("--jobs-dir", default="jobs")
+    sm.add_argument("--force", action="store_true", help="Re-run even if a cached result exists")
 
     kw = sub.add_parser("keywords", help="Run keyword analysis on an existing job")
     kw.add_argument("--job-dir", required=True)
+    kw.add_argument("--force", action="store_true", help="Re-run even if a cached result exists")
 
     tm = sub.add_parser("topical-map", help="Generate a topical map for an existing job")
     tm.add_argument("--job-dir", required=True)
+    tm.add_argument("--force", action="store_true", help="Re-run even if a cached result exists")
 
     dp = sub.add_parser("draft-post", help="Generate a draft blog post for an existing job")
     dp.add_argument("--job-dir", required=True)
     dp.add_argument("--keyword", default=None, help="Preferred keyword to draft (optional)")
+    dp.add_argument("--force", action="store_true",
+                    help="Re-draft even if this topic was already drafted")
 
     rn = sub.add_parser("render", help="Render the branded PDF report for an existing job")
     rn.add_argument("--job-dir", required=True)
@@ -103,12 +126,16 @@ def run_from_args(argv: list[str], fetch: Fetcher = http_fetch, provider=None, g
     ro.add_argument("--job-dir", required=True)
 
     rj = sub.add_parser("run-job", help="Run the full competitive-research pipeline for a client")
-    rj.add_argument("--client-name", required=True)
-    rj.add_argument("--client-url", required=True)
+    rj.add_argument("--client-name", help="Client name (required for a new job)")
+    rj.add_argument("--client-url", help="Client URL (required for a new job)")
     rj.add_argument("--competitors", default="", help="Comma-separated competitor URLs")
     rj.add_argument("--business-description", default=None)
     rj.add_argument("--keyword-source", default="api", choices=["api", "manual"])
     rj.add_argument("--jobs-dir", default="jobs")
+    rj.add_argument("--job-dir", default=None,
+                    help="Resume an existing job, skipping already-completed steps")
+    rj.add_argument("--force", action="store_true",
+                    help="Recompute every step, ignoring cached results")
 
     args = parser.parse_args(argv)
 
@@ -120,13 +147,15 @@ def run_from_args(argv: list[str], fetch: Fetcher = http_fetch, provider=None, g
             competitor_urls=competitors,
         )
         job_dir = create_job(config, jobs_dir=Path(args.jobs_dir))
-        run_sitemap(job_dir, fetch=fetch)
+        with job_log(job_dir):
+            run_sitemap(job_dir, fetch=fetch, force=args.force)
         return job_dir
 
     if args.command == "keywords":
         job_dir = Path(args.job_dir)
         try:
-            run_keywords(job_dir, provider=provider)
+            with job_log(job_dir):
+                run_keywords(job_dir, provider=provider, force=args.force)
         except (RuntimeError, ValueError, FileNotFoundError) as exc:
             print(f"Error: {exc}", file=sys.stderr)
             raise SystemExit(1)
@@ -135,7 +164,8 @@ def run_from_args(argv: list[str], fetch: Fetcher = http_fetch, provider=None, g
     if args.command == "topical-map":
         job_dir = Path(args.job_dir)
         try:
-            run_topical_map(job_dir, generator=generator)
+            with job_log(job_dir):
+                run_topical_map(job_dir, generator=generator, force=args.force)
         except (RuntimeError, ValueError, FileNotFoundError) as exc:
             print(f"Error: {exc}", file=sys.stderr)
             raise SystemExit(1)
@@ -144,16 +174,20 @@ def run_from_args(argv: list[str], fetch: Fetcher = http_fetch, provider=None, g
     if args.command == "draft-post":
         job_dir = Path(args.job_dir)
         try:
-            run_draft_post(job_dir, generator=draft_generator, fetch=fetch, preferred_keyword=args.keyword)
+            with job_log(job_dir):
+                run_draft_post(job_dir, generator=draft_generator, fetch=fetch,
+                               preferred_keyword=args.keyword, force=args.force)
         except (RuntimeError, ValueError, FileNotFoundError) as exc:
             print(f"Error: {exc}", file=sys.stderr)
             raise SystemExit(1)
+        _print_draft_warnings(load_data(job_dir))
         return job_dir
 
     if args.command == "render":
         job_dir = Path(args.job_dir)
         try:
-            run_render(job_dir, html_to_pdf=html_to_pdf)
+            with job_log(job_dir):
+                run_render(job_dir, html_to_pdf=html_to_pdf)
         except (RuntimeError, ValueError, FileNotFoundError) as exc:
             print(f"Error: {exc}", file=sys.stderr)
             raise SystemExit(1)
@@ -162,7 +196,8 @@ def run_from_args(argv: list[str], fetch: Fetcher = http_fetch, provider=None, g
     if args.command == "sheet":
         job_dir = Path(args.job_dir)
         try:
-            run_sheet(job_dir, writer=sheet_writer)
+            with job_log(job_dir):
+                run_sheet(job_dir, writer=sheet_writer)
         except (RuntimeError, ValueError, FileNotFoundError) as exc:
             print(f"Error: {exc}", file=sys.stderr)
             raise SystemExit(1)
@@ -170,29 +205,40 @@ def run_from_args(argv: list[str], fetch: Fetcher = http_fetch, provider=None, g
 
     if args.command == "draft-export":
         job_dir = Path(args.job_dir)
-        run_draft_export(job_dir, doc_writer=doc_writer)
+        with job_log(job_dir):
+            run_draft_export(job_dir, doc_writer=doc_writer)
         return job_dir
 
     if args.command == "refresh-outputs":
         job_dir = Path(args.job_dir)
-        run_draft_export(job_dir, doc_writer=doc_writer)
-        run_render(job_dir, html_to_pdf=html_to_pdf)
-        run_sheet(job_dir, writer=sheet_writer)
+        with job_log(job_dir):
+            run_draft_export(job_dir, doc_writer=doc_writer)
+            run_render(job_dir, html_to_pdf=html_to_pdf)
+            run_sheet(job_dir, writer=sheet_writer)
         _print_outputs_summary(load_data(job_dir))
         return job_dir
 
     if args.command == "run-job":
-        competitors = [c.strip() for c in args.competitors.split(",") if c.strip()]
-        config = JobConfig(
-            client_name=args.client_name,
-            client_url=args.client_url,
-            competitor_urls=competitors,
-            business_description=args.business_description,
-            keyword_source=args.keyword_source,
-        )
-        job_dir = create_job(config, jobs_dir=Path(args.jobs_dir))
+        if args.job_dir:
+            job_dir = Path(args.job_dir)
+        else:
+            if not args.client_name or not args.client_url:
+                parser.error(
+                    "run-job requires --client-name and --client-url "
+                    "(or --job-dir to resume an existing job)"
+                )
+            competitors = [c.strip() for c in args.competitors.split(",") if c.strip()]
+            config = JobConfig(
+                client_name=args.client_name,
+                client_url=args.client_url,
+                competitor_urls=competitors,
+                business_description=args.business_description,
+                keyword_source=args.keyword_source,
+            )
+            job_dir = create_job(config, jobs_dir=Path(args.jobs_dir))
         data = run_job(
             job_dir,
+            force=args.force,
             fetch=fetch,
             keyword_provider=provider,
             topical_generator=generator,

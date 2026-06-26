@@ -126,6 +126,53 @@ def test_run_job_runs_all_six_steps_offline(tmp_path):
     assert report.total_cost_usd == round(0.018 + 0.0525, 4)
 
 
+def test_run_job_skips_cached_steps_on_resume(tmp_path):
+    cfg = JobConfig(client_name="Acme Co", client_url="https://acme.com",
+                    competitor_urls=["https://rival.com"],
+                    business_description="Acme sells CRM software")
+    job_dir = create_job(cfg, jobs_dir=tmp_path)
+    _full_run(job_dir)                 # first run completes every step
+    data, _ = _full_run(job_dir)       # resume: the cached analysis steps skip
+
+    statuses = {s.name: s.status for s in data.run_report.steps}
+    assert statuses["sitemap"] == "skipped"
+    assert statuses["keywords"] == "skipped"
+    assert statuses["topical_map"] == "skipped"
+    assert statuses["draft_post"] == "skipped"
+    # cheap output steps always re-run so they reflect the latest data
+    assert statuses["render"] == "ok"
+    assert statuses["sheet"] == "ok"
+    assert statuses["draft_export"] == "ok"
+    # nothing recomputed by the LLM on a resume -> no cost
+    assert data.run_report.total_cost_usd == 0.0
+    # the run was logged to the job's run.log
+    assert (job_dir / "run.log").exists()
+
+
+def test_run_job_force_recomputes_everything(tmp_path):
+    from pathlib import Path
+    cfg = JobConfig(client_name="Acme Co", client_url="https://acme.com",
+                    competitor_urls=["https://rival.com"],
+                    business_description="Acme sells CRM software")
+    job_dir = create_job(cfg, jobs_dir=tmp_path)
+    _full_run(job_dir)
+
+    def html_to_pdf(html, output_path):
+        Path(output_path).write_text("PDF", encoding="utf-8")
+
+    data = run_job(
+        job_dir, force=True,
+        fetch=_sitemap_fetch(), keyword_provider=_keyword_provider(),
+        topical_generator=_topical_generator(), draft_generator=_draft_generator(),
+        html_to_pdf=html_to_pdf,
+        sheet_writer=lambda title, tabs: "https://docs.google.com/spreadsheets/d/FAKE",
+        doc_writer=lambda title, html: "https://docs.google.com/document/d/DOCFAKE/edit",
+    )
+    statuses = {s.name: s.status for s in data.run_report.steps}
+    assert all(v == "ok" for v in statuses.values()), statuses
+    assert data.run_report.total_cost_usd > 0.0   # the LLM steps ran again
+
+
 def test_run_job_is_resilient_to_a_failed_step(tmp_path):
     cfg = JobConfig(client_name="Acme Co", client_url="https://acme.com",
                     competitor_urls=["https://rival.com"])

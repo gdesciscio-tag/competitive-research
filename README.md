@@ -29,6 +29,26 @@ It prints a per-step pass/fail summary, the PDF path, the Google Sheet URL, and 
 Claude cost for the job. The pipeline is resilient: a failed step is recorded and the rest still
 run. Inside Claude Code, the `competitive-research` skill walks an operator through the same flow.
 
+Every run also writes a plain-text log to `jobs/<slug>/run.log`, and the summary prints a
+short `fix:` hint next to common credential/setup failures (e.g. a missing API key). Any
+SEO/quality concerns with the generated draft (keyword placement, meta length, word count)
+are listed as internal "quality notes" in the summary — they are never shown to the client.
+
+**Re-running is cheap.** Steps whose result is already cached are skipped (shown as `--` in
+the summary), so re-running incurs no extra crawl or Claude cost for completed work:
+
+```
+# resume an existing job, skipping completed steps
+.venv\Scripts\python -m compresearch.cli run-job --job-dir jobs\acme-co
+
+# recompute everything, ignoring the cache
+.venv\Scripts\python -m compresearch.cli run-job --job-dir jobs\acme-co --force
+```
+
+The cheap output steps (draft export, PDF, Sheet) always re-run so they reflect the latest
+data. Re-running with the same `--client-name` resumes the same job folder too. The individual
+analysis commands below also accept `--force`.
+
 ## Run the sitemap module
 
 ```

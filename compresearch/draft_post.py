@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from pathlib import Path
 from typing import Callable
 from urllib.parse import urlparse
@@ -191,6 +192,48 @@ def _client_urls(data: JobData) -> list[str]:
     return []
 
 
+# SEO/quality thresholds for the generated draft (internal QA, not client-facing).
+DRAFT_MIN_WORDS = 800
+DRAFT_MAX_WORDS = 2000
+TITLE_TAG_MAX = 60
+META_DESC_MAX = 160
+OPENING_CHARS = 600  # how much of the body counts as the "opening" for keyword placement
+
+
+def check_draft_quality(post: DraftPost) -> list[str]:
+    """Return human-readable SEO/quality warnings for a generated draft. Empty when the
+    draft looks good. These are internal QA flags — surfaced to the operator, never to the
+    client deliverables."""
+    warnings: list[str] = []
+
+    word_count = len(re.findall(r"\w+", post.body_markdown))
+    if word_count < DRAFT_MIN_WORDS:
+        warnings.append(f"Body is short ({word_count} words; aim for {DRAFT_MIN_WORDS}+).")
+    elif word_count > DRAFT_MAX_WORDS:
+        warnings.append(f"Body is long ({word_count} words; aim for under {DRAFT_MAX_WORDS}).")
+
+    if not post.meta_description:
+        warnings.append("Meta description is missing.")
+    elif len(post.meta_description) > META_DESC_MAX:
+        warnings.append(
+            f"Meta description is {len(post.meta_description)} characters (max {META_DESC_MAX})."
+        )
+
+    if post.title_tag and len(post.title_tag) > TITLE_TAG_MAX:
+        warnings.append(f"SEO title tag is {len(post.title_tag)} characters (max {TITLE_TAG_MAX}).")
+
+    keyword = (post.target_keyword or "").strip().lower()
+    if keyword:
+        if keyword not in post.title.lower():
+            warnings.append(f'Target keyword "{post.target_keyword}" is not in the title.')
+        if keyword not in post.body_markdown[:OPENING_CHARS].lower():
+            warnings.append(f'Target keyword "{post.target_keyword}" is not in the opening.')
+        if keyword not in " ".join(post.outline).lower():
+            warnings.append(f'Target keyword "{post.target_keyword}" is not in any heading.')
+
+    return warnings
+
+
 def _upsert_draft(drafts: list[DraftPostResult], result: DraftPostResult) -> None:
     """Add a successful draft to the accumulated list. Re-drafting the same keyword
     replaces that draft in place (a re-roll); a new keyword is appended (an extra post)."""
@@ -208,12 +251,13 @@ def run_draft_post(
     generator: DraftGenerator | None = None,
     fetch: Fetcher = http_fetch,
     preferred_keyword: str | None = None,
+    force: bool = False,
 ) -> JobData:
-    """Select a topic, generate a style-matched draft, and persist it to data.json."""
+    """Select a topic, generate a style-matched draft, and persist it to data.json.
+
+    Skips generation (and the LLM cost) when the selected topic has already been drafted,
+    unless force=True — so re-running is cheap and a different keyword still adds a post."""
     data = load_data(job_dir)
-    if generator is None:
-        generator = ClaudeDraftPostGenerator.from_settings()
-    model = getattr(generator, "model", None)
 
     topical_map = data.topical_map.map if data.topical_map is not None else None
     article = select_topic(topical_map, preferred_keyword)
@@ -222,11 +266,20 @@ def run_draft_post(
             "No topical-map article to draft for %s; run the topical-map module first",
             data.config.client_url,
         )
-        data.draft_post = DraftPostResult(
-            model=model, error="No topical-map article available to draft"
-        )
+        data.draft_post = DraftPostResult(error="No topical-map article available to draft")
         save_data(job_dir, data)
         return data
+
+    selected = article.target_keyword or article.title
+    if not force and any(d.selected_keyword == selected for d in data.draft_posts):
+        logging.info(
+            "Skipping draft for %r: already drafted (use --force to re-draft)", selected
+        )
+        return data
+
+    if generator is None:
+        generator = ClaudeDraftPostGenerator.from_settings()
+    model = getattr(generator, "model", None)
 
     candidates = _client_urls(data)
     if data.config.style_sample:
@@ -242,12 +295,16 @@ def run_draft_post(
         style_samples=style_samples,
         internal_link_candidates=candidates,
     )
-    selected = article.target_keyword or article.title
     try:
         post = generator(prompt)
         candidate_set = set(candidates)
         post.internal_links = [link for link in post.internal_links if link.url in candidate_set]
-        result = DraftPostResult(post=post, model=model, selected_keyword=selected)
+        result = DraftPostResult(
+            post=post, model=model, selected_keyword=selected,
+            warnings=check_draft_quality(post),
+        )
+        for warning in result.warnings:
+            logging.warning("Draft quality (%s): %s", selected, warning)
         data.draft_post = result
         _upsert_draft(data.draft_posts, result)
     except Exception as exc:

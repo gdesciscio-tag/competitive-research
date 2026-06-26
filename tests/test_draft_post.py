@@ -175,10 +175,10 @@ def test_run_draft_post_appends_second_keyword_and_rerolls_same(tmp_path, make_d
     data = load_data(job_dir)
     assert [d.selected_keyword for d in data.draft_posts] == ["what is a crm", "crm pricing"]
 
-    # 3) re-draft the first topic -> replaces in place, no duplicate, order preserved
+    # 3) re-draft the first topic with force -> replaces in place, no duplicate, order preserved
     run_draft_post(job_dir, generator=make_draft_generator(
         [], post=DraftPost(title="What is a CRM?", target_keyword="what is a crm", body_markdown="v2")),
-        preferred_keyword="what is a crm")
+        preferred_keyword="what is a crm", force=True)
     data = load_data(job_dir)
     assert [d.selected_keyword for d in data.draft_posts] == ["what is a crm", "crm pricing"]
     assert data.draft_posts[0].post.body_markdown == "v2"   # re-rolled content
@@ -189,7 +189,8 @@ def test_run_draft_post_error_keeps_prior_drafts(tmp_path, make_draft_generator)
     job_dir = _seed_draft_job(tmp_path, with_sitemap=False)
     run_draft_post(job_dir, generator=make_draft_generator(
         [], post=DraftPost(title="What is a CRM?", target_keyword="what is a crm", body_markdown="ok")))
-    run_draft_post(job_dir, generator=make_draft_generator([], raises=RuntimeError("boom")))
+    # force a re-draft of the same topic; the generator fails this time
+    run_draft_post(job_dir, generator=make_draft_generator([], raises=RuntimeError("boom")), force=True)
     data = load_data(job_dir)
     assert [d.selected_keyword for d in data.draft_posts] == ["what is a crm"]  # failure not appended
     assert data.draft_post.error == "boom"                                     # step still reports error
@@ -239,6 +240,53 @@ def test_fetch_style_samples_skips_empty_body(make_fetch):
 def test_select_topic_preferred_keyword_miss_falls_back_to_volume():
     # 'nonexistent' matches nothing -> falls back to the highest-volume article
     assert select_topic(_map(), preferred_keyword="nonexistent").target_keyword == "high"
+
+
+def test_check_draft_quality_flags_problems():
+    from compresearch.draft_post import check_draft_quality
+    post = DraftPost(
+        title="A generic guide", target_keyword="video sales letter",
+        title_tag="x" * 70, meta_description="y" * 200, outline=["Intro"],
+        body_markdown="short body",
+    )
+    warnings = " ".join(check_draft_quality(post))
+    assert "short" in warnings.lower()                    # word count
+    assert "Meta description is 200 characters" in warnings
+    assert "SEO title tag is 70 characters" in warnings
+    assert "is not in the title" in warnings
+    assert "is not in the opening" in warnings
+    assert "is not in any heading" in warnings
+
+
+def test_check_draft_quality_clean_post_has_no_warnings():
+    from compresearch.draft_post import check_draft_quality
+    post = DraftPost(
+        title="The video sales letter guide", target_keyword="video sales letter",
+        title_tag="VSL guide", meta_description="A short, useful meta description.",
+        outline=["What is a video sales letter"],
+        body_markdown="video sales letter " * 500,   # ~1500 words, keyword in opening
+    )
+    assert check_draft_quality(post) == []
+
+
+def test_run_draft_post_records_quality_warnings(tmp_path, make_draft_generator):
+    job_dir = _seed_draft_job(tmp_path, with_sitemap=False)
+    post = DraftPost(title="Untitled", target_keyword="what is a crm", body_markdown="tiny")
+    run_draft_post(job_dir, generator=make_draft_generator([], post=post))
+    data = load_data(job_dir)
+    assert data.draft_post.warnings                          # short body, missing meta, keyword gaps
+    assert data.draft_posts[0].warnings == data.draft_post.warnings
+
+
+def test_run_draft_post_skips_already_drafted_topic(tmp_path, make_draft_generator):
+    job_dir = _seed_draft_job(tmp_path, with_sitemap=False)
+    run_draft_post(job_dir, generator=make_draft_generator([], post=DraftPost(
+        title="What is a CRM?", target_keyword="what is a crm", body_markdown="v1")))
+    captured = []
+    run_draft_post(job_dir, generator=make_draft_generator(captured, post=DraftPost(
+        title="What is a CRM?", target_keyword="what is a crm", body_markdown="v2")))
+    assert captured == []                                    # generator never called -> skipped
+    assert load_data(job_dir).draft_posts[0].post.body_markdown == "v1"  # unchanged
 
 
 def test_draft_generator_records_last_usage():

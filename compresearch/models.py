@@ -145,6 +145,7 @@ class DraftPostResult(BaseModel):
     post: DraftPost | None = None
     model: str | None = None
     selected_keyword: str | None = None  # which topic was drafted
+    warnings: list[str] = Field(default_factory=list)  # internal SEO/quality flags
     error: str | None = None
 
 

@@ -38,9 +38,10 @@ Add `--keyword-source manual` for the manual KeySearch path.
 ## Draft additional posts (optional)
 
 The job drafts one post (the highest-volume topic). To add more, run `draft-post` against the
-existing job with a different `--keyword` — each new keyword is kept alongside the others
-(re-running the same keyword re-rolls it). Then run `refresh-outputs --job-dir <dir>` to
-rebuild the PDF, Google Sheet, and exported drafts so they include every draft.
+existing job with a different `--keyword` — each new keyword is kept alongside the others.
+Re-running the *same* keyword is skipped as cached; add `--force` to re-roll it. Then run
+`refresh-outputs --job-dir <dir>` to rebuild the PDF, Google Sheet, and exported drafts so
+they include every draft.
 
 ```
 .venv\Scripts\python -m compresearch.cli draft-post --job-dir jobs\<slug> --keyword "<topic>"
@@ -49,7 +50,15 @@ rebuild the PDF, Google Sheet, and exported drafts so they include every draft.
 
 ## Report back
 
-The command prints a per-step summary (which steps succeeded/failed), the branded PDF path,
-the shared Google Sheet URL, and the estimated Claude cost for the job. Relay those to the
-operator. The pipeline is resilient — if one step fails (e.g. a missing credential), the others
-still run and the summary shows exactly what was produced.
+The command prints a per-step summary (which steps succeeded/failed/were skipped as cached),
+the branded PDF path, the shared Google Sheet URL, and the estimated Claude cost for the job.
+Relay those to the operator. The pipeline is resilient — if one step fails (e.g. a missing
+credential), the others still run and the summary shows exactly what was produced, with a
+`fix:` hint for common credential problems. A full log is saved to `jobs/<slug>/run.log`.
+
+The summary may also list internal "quality notes" for a draft (keyword placement, meta
+length, word count) — these are for the operator only, not the client.
+
+**Re-running / fixing a failed step:** re-run with `run-job --job-dir jobs/<slug>` to resume
+without redoing completed work; add `--force` to recompute everything. So if a step failed on
+a missing credential, set the credential and re-run — only the failed/remaining steps execute.

@@ -420,9 +420,16 @@ def run_keywords(
     job_dir: Path,
     provider: Provider | None = None,
     enricher: Enricher | None = None,
+    force: bool = False,
 ) -> JobData:
-    """Run keyword analysis for a job and persist the result to data.json."""
+    """Run keyword analysis for a job and persist the result to data.json.
+
+    Skips the API/CSV analysis when a complete result is already cached, unless force=True."""
     data = load_data(job_dir)
+    if not force and data.keywords is not None and not data.keywords.is_partial:
+        logging.info("Skipping keywords for %s: cached result present (use --force to re-run)",
+                     data.config.client_url)
+        return data
     if provider is None:
         provider = _provider_for_job(Path(job_dir), data.config)
     data.keywords = analyze_keywords(

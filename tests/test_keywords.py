@@ -488,3 +488,37 @@ def test_parse_keyword_overview_reads_volume_and_difficulty():
     assert entries[0].search_volume == 320
     assert entries[0].difficulty == 18
     assert entries[1].search_volume == 90
+
+
+def test_run_keywords_skips_when_cached(tmp_path):
+    from compresearch.keywords import run_keywords
+    from compresearch.job_store import create_job, load_data, save_data
+    from compresearch.models import JobConfig, KeywordResult, DomainKeywords
+    cfg = JobConfig(client_name="Acme Co", client_url="https://acme.com")
+    job_dir = create_job(cfg, jobs_dir=tmp_path)
+    data = load_data(job_dir)
+    data.keywords = KeywordResult(client=DomainKeywords(domain="https://acme.com", total_keywords=5))
+    save_data(job_dir, data)
+    calls = []
+
+    def provider(domain):
+        calls.append(domain)
+        return []
+
+    run_keywords(job_dir, provider=provider)
+    assert calls == []                                       # skipped -> provider untouched
+    assert load_data(job_dir).keywords.client.total_keywords == 5
+
+
+def test_run_keywords_force_recomputes(tmp_path, make_provider):
+    from compresearch.keywords import run_keywords
+    from compresearch.job_store import create_job, load_data, save_data
+    from compresearch.models import JobConfig, KeywordResult, DomainKeywords, KeywordEntry
+    cfg = JobConfig(client_name="Acme Co", client_url="https://acme.com")
+    job_dir = create_job(cfg, jobs_dir=tmp_path)
+    data = load_data(job_dir)
+    data.keywords = KeywordResult(client=DomainKeywords(domain="https://acme.com", total_keywords=5))
+    save_data(job_dir, data)
+    provider = make_provider({"acme.com": [KeywordEntry(keyword="crm", search_volume=10, position=3)]})
+    run_keywords(job_dir, provider=provider, force=True)
+    assert load_data(job_dir).keywords.client.total_keywords == 1   # recomputed from provider

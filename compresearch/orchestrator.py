@@ -10,6 +10,7 @@ from compresearch.job_store import load_data, save_data
 from compresearch.keywords import run_keywords
 from compresearch.models import JobData, RunReport, StepResult
 from compresearch.render import render_pdf, run_render
+from compresearch.runlog import job_log
 from compresearch.sheets import run_sheet
 from compresearch.sitemap import http_fetch, run_sitemap
 from compresearch.topical_map import ClaudeTopicalMapGenerator, run_topical_map
@@ -46,6 +47,7 @@ def _llm_cost(generator) -> float | None:
 def run_job(
     job_dir,
     *,
+    force=False,
     fetch=http_fetch,
     keyword_provider=None,
     topical_generator=None,
@@ -56,7 +58,25 @@ def run_job(
 ) -> JobData:
     """Run the full pipeline for one job: sitemap -> keywords -> topical map -> draft
     -> draft export -> PDF -> Sheet. Resilient: a failed step is recorded and the
-    pipeline continues."""
+    pipeline continues.
+
+    Steps whose result is already cached are skipped (status "skipped") so re-running a
+    job is cheap; pass force=True to recompute everything. The crawl/LLM steps cache;
+    the cheap output steps (export, PDF, Sheet) always re-run so they reflect the latest
+    data. All logging is also written to jobs/<slug>/run.log.
+    """
+    with job_log(job_dir):
+        return _run_pipeline(
+            job_dir, force=force, fetch=fetch, keyword_provider=keyword_provider,
+            topical_generator=topical_generator, draft_generator=draft_generator,
+            html_to_pdf=html_to_pdf, sheet_writer=sheet_writer, doc_writer=doc_writer,
+        )
+
+
+def _run_pipeline(
+    job_dir, *, force, fetch, keyword_provider, topical_generator,
+    draft_generator, html_to_pdf, sheet_writer, doc_writer,
+) -> JobData:
     steps: list[StepResult] = []
 
     def record(name, status, error, started, cost=None):
@@ -65,43 +85,59 @@ def run_job(
             duration_seconds=round(time.monotonic() - started, 2), cost_usd=cost,
         ))
 
+    def cached(attr) -> bool:
+        """True when a step can be skipped: not forced and already completed cleanly."""
+        return not force and _section_status(job_dir, attr)[0] == "ok"
+
     # 1. Sitemap
     t = time.monotonic()
-    try:
-        run_sitemap(job_dir, fetch=fetch)
-        status, err = _section_status(job_dir, "sitemap")
-        record("sitemap", status, err, t)
-    except Exception as exc:
-        record("sitemap", "failed", str(exc), t)
+    if cached("sitemap"):
+        record("sitemap", "skipped", None, t)
+    else:
+        try:
+            run_sitemap(job_dir, fetch=fetch, force=force)
+            status, err = _section_status(job_dir, "sitemap")
+            record("sitemap", status, err, t)
+        except Exception as exc:
+            record("sitemap", "failed", str(exc), t)
 
     # 2. Keywords
     t = time.monotonic()
-    try:
-        run_keywords(job_dir, provider=keyword_provider)
-        status, err = _section_status(job_dir, "keywords")
-        record("keywords", status, err, t)
-    except Exception as exc:
-        record("keywords", "failed", str(exc), t)
+    if cached("keywords"):
+        record("keywords", "skipped", None, t)
+    else:
+        try:
+            run_keywords(job_dir, provider=keyword_provider, force=force)
+            status, err = _section_status(job_dir, "keywords")
+            record("keywords", status, err, t)
+        except Exception as exc:
+            record("keywords", "failed", str(exc), t)
 
     # 3. Topical map (LLM)
     t = time.monotonic()
-    try:
-        gen = topical_generator or ClaudeTopicalMapGenerator.from_settings()
-        run_topical_map(job_dir, generator=gen)
-        status, err = _section_status(job_dir, "topical_map")
-        record("topical_map", status, err, t, _llm_cost(gen))
-    except Exception as exc:
-        record("topical_map", "failed", str(exc), t)
+    if cached("topical_map"):
+        record("topical_map", "skipped", None, t)
+    else:
+        try:
+            gen = topical_generator or ClaudeTopicalMapGenerator.from_settings()
+            run_topical_map(job_dir, generator=gen, force=force)
+            status, err = _section_status(job_dir, "topical_map")
+            record("topical_map", status, err, t, _llm_cost(gen))
+        except Exception as exc:
+            record("topical_map", "failed", str(exc), t)
 
     # 4. Draft post (LLM)
     t = time.monotonic()
-    try:
-        gen = draft_generator or ClaudeDraftPostGenerator.from_settings()
-        run_draft_post(job_dir, generator=gen, fetch=fetch)
-        status, err = _section_status(job_dir, "draft_post")
-        record("draft_post", status, err, t, _llm_cost(gen))
-    except Exception as exc:
-        record("draft_post", "failed", str(exc), t)
+    if cached("draft_post"):
+        record("draft_post", "skipped", None, t)
+    else:
+        try:
+            gen = draft_generator or ClaudeDraftPostGenerator.from_settings()
+            run_draft_post(job_dir, generator=gen, fetch=fetch, force=force)
+            status, err = _section_status(job_dir, "draft_post")
+            record("draft_post", status, err, t, _llm_cost(gen))
+        except Exception as exc:
+            record("draft_post", "failed", str(exc), t)
 
     # 5. Draft export (HTML + Google Doc)
     t = time.monotonic()

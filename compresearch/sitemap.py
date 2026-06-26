@@ -313,9 +313,15 @@ def http_fetch(url: str) -> bytes:
     return resp.content
 
 
-def run_sitemap(job_dir: Path, fetch: Fetcher = http_fetch) -> JobData:
-    """Run sitemap comparison for a job and persist the result to data.json."""
+def run_sitemap(job_dir: Path, fetch: Fetcher = http_fetch, force: bool = False) -> JobData:
+    """Run sitemap comparison for a job and persist the result to data.json.
+
+    Skips the crawl when a complete result is already cached, unless force=True."""
     data = load_data(job_dir)
+    if not force and data.sitemap is not None and not data.sitemap.is_partial:
+        logging.info("Skipping sitemap for %s: cached result present (use --force to re-run)",
+                     data.config.client_url)
+        return data
     data.sitemap = compare_domains(
         data.config.client_url, data.config.competitor_urls, fetch
     )

@@ -229,6 +229,41 @@ def test_run_job_subcommand_end_to_end(tmp_path):
     assert data.sheet.sheet_url.endswith("FAKE")
 
 
+def test_run_job_subcommand_resume_skips_cached_steps(tmp_path):
+    from pathlib import Path as _P
+    from tests.test_orchestrator import (
+        _sitemap_fetch, _keyword_provider, _topical_generator, _draft_generator,
+    )
+
+    def html_to_pdf(html, output_path):
+        _P(output_path).write_text("PDF", encoding="utf-8")
+
+    kwargs = dict(
+        fetch=_sitemap_fetch(), provider=_keyword_provider(),
+        generator=_topical_generator(), draft_generator=_draft_generator(),
+        html_to_pdf=html_to_pdf,
+        sheet_writer=lambda title, tabs: "https://docs.google.com/spreadsheets/d/FAKE",
+        doc_writer=lambda title, html: "https://docs.google.com/document/d/DOCFAKE/edit",
+    )
+    job_dir = run_from_args(
+        ["run-job", "--client-name", "Acme Co", "--client-url", "https://acme.com",
+         "--competitors", "https://rival.com", "--jobs-dir", str(tmp_path)],
+        **kwargs,
+    )
+    returned = run_from_args(["run-job", "--job-dir", str(job_dir)], **kwargs)
+    assert returned == job_dir
+    statuses = {s.name: s.status for s in load_data(job_dir).run_report.steps}
+    assert statuses["sitemap"] == "skipped"
+    assert statuses["keywords"] == "skipped"
+    assert statuses["topical_map"] == "skipped"
+    assert statuses["render"] == "ok"
+
+
+def test_run_job_subcommand_requires_client_or_job_dir(tmp_path):
+    with pytest.raises(SystemExit):
+        run_from_args(["run-job", "--jobs-dir", str(tmp_path)])  # neither client args nor --job-dir
+
+
 def test_run_from_args_draft_export_writes_html_and_records_doc(tmp_path):
     from compresearch.cli import run_from_args
     from compresearch.job_store import create_job, load_data, save_data

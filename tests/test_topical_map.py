@@ -186,3 +186,27 @@ def test_generator_records_last_usage():
     assert gen.last_usage is None          # nothing recorded before the first call
     gen("prompt")
     assert gen.last_usage == {"input_tokens": 1200, "output_tokens": 800}
+
+
+def test_run_topical_map_skips_when_cached(tmp_path):
+    from compresearch.models import TopicalMapResult
+    cfg = JobConfig(client_name="Acme Co", client_url="https://acme.com")
+    job_dir = create_job(cfg, jobs_dir=tmp_path)
+    data = load_data(job_dir)
+    data.topical_map = TopicalMapResult(map=TopicalMap(pillars=[PillarTopic(name="P")]), model="cached")
+    save_data(job_dir, data)
+    # No generator passed: if it didn't skip it would hit from_settings/the API. It skips.
+    run_topical_map(job_dir)
+    assert load_data(job_dir).topical_map.model == "cached"
+
+
+def test_run_topical_map_force_recomputes(tmp_path, make_fake_generator):
+    from compresearch.models import TopicalMapResult
+    cfg = JobConfig(client_name="Acme Co", client_url="https://acme.com")
+    job_dir = create_job(cfg, jobs_dir=tmp_path)
+    data = load_data(job_dir)
+    data.topical_map = TopicalMapResult(map=TopicalMap(pillars=[PillarTopic(name="Old")]), model="cached")
+    save_data(job_dir, data)
+    new_map = TopicalMap(pillars=[PillarTopic(name="New")])
+    run_topical_map(job_dir, generator=make_fake_generator([], result=new_map), force=True)
+    assert load_data(job_dir).topical_map.map.pillars[0].name == "New"

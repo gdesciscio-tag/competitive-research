@@ -317,3 +317,23 @@ def test_clean_run_is_not_partial(make_fetch, client_map, rival_map):
     })
     result = compare_domains("https://acme.com", ["https://rival.com"], fetch)
     assert result.is_partial is False
+
+
+def test_run_sitemap_skips_when_cached(tmp_path):
+    from compresearch.sitemap import run_sitemap
+    from compresearch.job_store import create_job, load_data, save_data
+    from compresearch.models import JobConfig, SitemapResult, DomainSitemap
+    cfg = JobConfig(client_name="Acme Co", client_url="https://acme.com")
+    job_dir = create_job(cfg, jobs_dir=tmp_path)
+    data = load_data(job_dir)
+    data.sitemap = SitemapResult(client=DomainSitemap(domain="https://acme.com", total_urls=7))
+    save_data(job_dir, data)
+    calls = []
+
+    def fetch(url):
+        calls.append(url)
+        raise FileNotFoundError(url)
+
+    run_sitemap(job_dir, fetch=fetch)
+    assert calls == []                                       # skipped -> never crawled
+    assert load_data(job_dir).sitemap.client.total_urls == 7

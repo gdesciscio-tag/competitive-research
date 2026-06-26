@@ -160,9 +160,20 @@ def _gather_topical_inputs(
     )
 
 
-def run_topical_map(job_dir: Path, generator: Generator | None = None) -> JobData:
-    """Generate a topical map for a job and persist it to data.json."""
+def run_topical_map(job_dir: Path, generator: Generator | None = None, force: bool = False) -> JobData:
+    """Generate a topical map for a job and persist it to data.json.
+
+    Skips the LLM call when a successful map is already cached, unless force=True."""
     data = load_data(job_dir)
+    if (
+        not force
+        and data.topical_map is not None
+        and data.topical_map.error is None
+        and data.topical_map.map is not None
+    ):
+        logging.info("Skipping topical map for %s: cached result present (use --force to re-run)",
+                     data.config.client_url)
+        return data
     if generator is None:
         generator = ClaudeTopicalMapGenerator.from_settings()
 
