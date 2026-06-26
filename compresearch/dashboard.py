@@ -55,6 +55,7 @@ def build_dashboard_context(data: JobData, branding: Branding, report_date: str 
         domains = ([data.keywords.client] if data.keywords.client else []) + list(data.keywords.competitors)
         for dk in domains:
             domain_keywords.append({"domain": short_domain(dk.domain),
+                                    "capped": dk.capped,
                                     "keywords": [{"keyword": e.keyword, "volume": e.search_volume,
                                                   "difficulty": e.difficulty, "position": e.position,
                                                   "url": e.url} for e in dk.keywords]})
@@ -82,10 +83,12 @@ def build_dashboard_context(data: JobData, branding: Branding, report_date: str 
         [d["domain"] for d in sitemap_domains], [d["total"] for d in sitemap_domains],
         bar_color=branding.accent_color, text_color=branding.text_color,
     )
-    keyword_counts = [{"domain": dk["domain"], "total": len(dk["keywords"])} for dk in domain_keywords]
+    keyword_counts = [{"domain": dk["domain"], "total": len(dk["keywords"]), "capped": dk["capped"]}
+                      for dk in domain_keywords]
     keyword_counts_svg = _bar_chart_svg(
         [d["domain"] for d in keyword_counts], [d["total"] for d in keyword_counts],
         bar_color=branding.primary_color, text_color=branding.text_color,
+        value_labels=[f"{d['total']}+" if d["capped"] else str(d["total"]) for d in keyword_counts],
     )
 
     is_partial = bool(

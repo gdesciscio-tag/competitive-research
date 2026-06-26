@@ -163,7 +163,7 @@ input.filter:focus{outline:none;border-color:{{ branding.primary_color }};box-sh
       </div>
       {% for dk in domain_keywords %}
       <div class="subpanel{% if loop.first %} active{% endif %}" data-subpanel="kwdom{{ loop.index }}">
-        <p class="domain-meta">{{ dk.keywords|length }} ranking keywords</p>
+        <p class="domain-meta">{{ dk.keywords|length }}{% if dk.capped %}+{% endif %} ranking keywords{% if dk.capped %} (showing top {{ dk.keywords|length }}){% endif %}</p>
         <input class="filter" type="text" placeholder="Filter {{ dk.domain }} keywords..." data-filter="dom{{ loop.index }}">
         <table data-sortable><thead><tr><th>Keyword</th><th class="num" data-num>Volume</th><th class="num" data-num>Difficulty</th><th class="num" data-num>Position</th></tr></thead><tbody data-rows="dom{{ loop.index }}">
         {% for e in dk.keywords %}<tr>

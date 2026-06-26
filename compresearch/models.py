@@ -53,6 +53,7 @@ class DomainKeywords(BaseModel):
     domain: str
     keywords: list[KeywordEntry] = Field(default_factory=list)
     total_keywords: int = 0
+    capped: bool = False   # the fetch hit the provider's per-domain limit (true total is higher)
     error: str | None = None
 
 

@@ -180,7 +180,7 @@ class DataForSEOProvider:
         self._password = password
         self._location_code = location_code
         self._language_name = language_name
-        self._limit = limit
+        self.limit = limit   # public: callers can detect a capped result (len == limit)
         self._raw_fetch = raw_fetch or self._http_fetch
         self._raw_enrich = raw_enrich or self._http_enrich
         self.cost_usd = 0.0   # accumulates the `cost` DataForSEO reports on each response
@@ -193,7 +193,7 @@ class DataForSEOProvider:
                 "target": domain_key,
                 "location_code": self._location_code,
                 "language_name": self._language_name,
-                "limit": self._limit,
+                "limit": self.limit,
             }],
             timeout=120.0,
         )
@@ -242,7 +242,11 @@ def analyze_domain_keywords(domain: str, provider: Provider) -> DomainKeywords:
     """Fetch one domain's ranking keywords; never raises (errors are captured)."""
     try:
         keywords = provider(domain)
-        return DomainKeywords(domain=domain, keywords=keywords, total_keywords=len(keywords))
+        # If the provider exposes a per-domain limit and we hit it, the true total is higher.
+        limit = getattr(provider, "limit", None)
+        capped = limit is not None and len(keywords) >= limit
+        return DomainKeywords(domain=domain, keywords=keywords,
+                              total_keywords=len(keywords), capped=capped)
     except Exception as exc:
         logging.warning("Keyword lookup failed for %s: %s", domain, exc)
         return DomainKeywords(domain=domain, error=str(exc))

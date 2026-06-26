@@ -143,7 +143,7 @@ def test_dataforseo_provider_uses_injected_raw_fetch():
 
 def test_dataforseo_provider_default_limit_is_200():
     # Keep the per-domain keyword cap modest to bound DataForSEO cost.
-    assert DataForSEOProvider(login="x", password="y")._limit == 200
+    assert DataForSEOProvider(login="x", password="y").limit == 200
 
 
 def test_enrich_keywords_uses_injected_fetch_and_parses():
@@ -545,3 +545,17 @@ def test_run_keywords_records_dataforseo_cost(tmp_path):
     provider = DataForSEOProvider("u", "pw", raw_fetch=lambda d: ranked)
     run_keywords(job_dir, provider=provider)
     assert load_data(job_dir).keywords.cost_usd == 0.1   # client + 1 competitor, 0.05 each
+
+
+def test_domain_keywords_capped_when_result_hits_limit():
+    from compresearch.keywords import DataForSEOProvider, analyze_domain_keywords
+    payload = {"tasks": [{"result": [{"items": [
+        {"keyword_data": {"keyword": "a"}}, {"keyword_data": {"keyword": "b"}}]}]}]}
+    # limit 2, two returned -> capped
+    capped = analyze_domain_keywords("https://acme.com",
+                                     DataForSEOProvider("u", "pw", limit=2, raw_fetch=lambda d: payload))
+    assert capped.total_keywords == 2 and capped.capped is True
+    # limit 5, two returned -> not capped
+    not_capped = analyze_domain_keywords("https://acme.com",
+                                         DataForSEOProvider("u", "pw", limit=5, raw_fetch=lambda d: payload))
+    assert not_capped.total_keywords == 2 and not_capped.capped is False

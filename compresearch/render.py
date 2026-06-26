@@ -35,10 +35,13 @@ def _bar_chart_svg(
     height: int = 300,
     bar_color: str = "#6C757D",
     text_color: str = "#1F2933",
+    value_labels: list[str] | None = None,
 ) -> str:
     """Render a simple vertical bar chart as a standalone, deterministic SVG string.
 
     Labels are angled (-30 degrees) below the bars so long domain names don't overlap.
+    Bar heights use `values`; the text above each bar is `value_labels[i]` when provided
+    (e.g. "200+" for a capped count), otherwise the numeric value.
     """
     if not values:
         return ""
@@ -62,9 +65,10 @@ def _bar_chart_svg(
             f'<rect x="{x:.1f}" y="{y:.1f}" width="{bar_w:.1f}" height="{bar_h:.1f}" '
             f'fill="{bar_color}" rx="3"/>'
         )
+        display = value_labels[index] if value_labels is not None else value
         parts.append(
             f'<text x="{cx:.1f}" y="{y - 6:.1f}" text-anchor="middle" '
-            f'font-size="12" fill="{text_color}">{value}</text>'
+            f'font-size="12" fill="{text_color}">{escape(str(display))}</text>'
         )
         label_y = baseline + 14
         parts.append(

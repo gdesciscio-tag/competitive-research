@@ -42,7 +42,7 @@ def _full_jobdata():
                                   total_keywords=1),
             competitors=[DomainKeywords(domain="https://rival.com",
                                         keywords=[KeywordEntry(keyword="free crm", search_volume=800, position=4)],
-                                        total_keywords=1)],
+                                        total_keywords=1, capped=True)],
             gaps=[KeywordGap(keyword="free crm", search_volume=800, difficulty=30.0,
                              best_competitor_position=4, traffic_value=80.0,
                              competitors_ranking=["https://rival.com"])],
@@ -73,6 +73,9 @@ def test_build_dashboard_context_shape_and_completeness():
     assert ctx["quick_wins"][0]["url"] == "https://acme.com/crm"
     # per-domain keyword tables: client + 1 competitor
     assert [d["domain"] for d in ctx["domain_keywords"]] == ["acme.com", "rival.com"]
+    # capped flag carried through, and the chart label shows "1+" for the capped domain
+    assert ctx["domain_keywords"][1]["capped"] is True
+    assert ">1+<" in ctx["keyword_counts_svg"]
     # per-domain page inventory (the actual URLs, with last-modified)
     assert [d["domain"] for d in ctx["sitemap"]["domains"]] == ["acme.com", "rival.com"]
     assert ctx["sitemap"]["domains"][0]["pages"] == [
@@ -115,6 +118,7 @@ def test_render_dashboard_html_contains_sections_and_is_self_contained():
     assert 'data-subtab="smdom1"' in html and 'data-subpanel="smdom1"' in html
     assert "https://acme.com/about" in html          # sitemap tab lists actual pages
     assert 'data-rows="smpages1"' in html            # per-domain page list is filterable
+    assert "1+ ranking keywords" in html             # capped domain shows "+" in its header
     # logo fallback path (default Branding has no logo) renders the agency name
     assert "TAG Online" in html
     # filter inputs on both the keyword-gap table and the per-domain tables
