@@ -36,6 +36,32 @@ ul.links{padding-left:18px;}
 .subpanel{display:none;}
 .subpanel.active{display:block;}
 .domain-meta{font-size:12px;color:{{ branding.muted_color }};margin:0 0 10px;}
+/* interactions: lightweight transitions + hovers (CSS only) */
+.card{transition:transform .15s ease, box-shadow .15s ease;}
+.card:hover{transform:translateY(-2px);box-shadow:0 6px 18px rgba(0,0,0,.07);}
+.tab{transition:color .15s ease, border-color .15s ease;}
+.tab:hover{color:{{ branding.primary_color }};}
+.subtab{transition:background .15s ease, border-color .15s ease, color .15s ease, transform .1s ease;}
+.subtab:not(.active):hover{border-color:{{ branding.primary_color }};color:{{ branding.primary_color }};}
+.subtab:active{transform:scale(.97);}
+tbody tr{transition:background-color .12s ease;}
+tbody tr:hover{background:#f5f8fc;}
+table[data-sortable] th{transition:color .12s ease;}
+table[data-sortable] th:hover{color:{{ branding.primary_color }};}
+a{transition:color .15s ease;}
+a:hover{text-decoration:underline;}
+.draft{transition:box-shadow .15s ease;}
+.draft:hover{box-shadow:0 6px 18px rgba(0,0,0,.06);}
+input.filter{transition:border-color .15s ease, box-shadow .15s ease;}
+input.filter:focus{outline:none;border-color:{{ branding.primary_color }};box-shadow:0 0 0 3px rgba(0,0,0,.05);}
+.panel.active,.subpanel.active{animation:fadeInUp .28s ease both;}
+.cards .card{animation:fadeIn .3s ease both;}
+.cards .card:nth-child(2){animation-delay:.05s;}
+.cards .card:nth-child(3){animation-delay:.1s;}
+.cards .card:nth-child(4){animation-delay:.15s;}
+@keyframes fadeIn{from{opacity:0;}to{opacity:1;}}
+@keyframes fadeInUp{from{opacity:0;transform:translateY(6px);}to{opacity:1;transform:translateY(0);}}
+@media (prefers-reduced-motion: reduce){*{animation:none !important;transition:none !important;}}
 </style></head><body>
 <div class="wrap">
   <div class="header">

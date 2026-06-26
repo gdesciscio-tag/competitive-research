@@ -125,6 +125,9 @@ def test_render_dashboard_html_contains_sections_and_is_self_contained():
     assert "src=\"http" not in html
     assert "src='http" not in html
     assert "cdn" not in html.lower()
+    # CSS-only animations, with a reduced-motion accessibility guard
+    assert "@keyframes" in html
+    assert "prefers-reduced-motion" in html
 
 
 def test_render_dashboard_html_handles_empty_job():
