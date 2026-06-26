@@ -225,11 +225,37 @@ def test_run_topical_map_skips_when_cached(tmp_path):
     cfg = JobConfig(client_name="Acme Co", client_url="https://acme.com")
     job_dir = create_job(cfg, jobs_dir=tmp_path)
     data = load_data(job_dir)
-    data.topical_map = TopicalMapResult(map=TopicalMap(pillars=[PillarTopic(name="P")]), model="cached")
+    data.topical_map = TopicalMapResult(
+        map=TopicalMap(pillars=[PillarTopic(
+            name="P",
+            clusters=[TopicCluster(name="C", articles=[ArticleIdea(title="A")])],
+        )]),
+        model="cached",
+    )
     save_data(job_dir, data)
     # No generator passed: if it didn't skip it would hit from_settings/the API. It skips.
     run_topical_map(job_dir)
     assert load_data(job_dir).topical_map.model == "cached"
+
+
+def test_run_topical_map_resume_regenerates_stale_empty_cached_map(tmp_path, make_fake_generator):
+    # A map cached as "complete" before the empty-map guard existed (map present, no
+    # error, but no article ideas) is stale: a plain resume must regenerate it rather
+    # than skip on the cache check.
+    from compresearch.models import TopicalMapResult
+    job_dir = _seed_job(tmp_path)
+    data = load_data(job_dir)
+    data.topical_map = TopicalMapResult(map=TopicalMap(pillars=[]), model="stale")
+    save_data(job_dir, data)
+    good = TopicalMap(pillars=[PillarTopic(
+        name="CRM Basics",
+        clusters=[TopicCluster(name="Getting started", articles=[ArticleIdea(title="What is a CRM?")])],
+    )])
+    run_topical_map(job_dir, generator=make_fake_generator([], result=good))
+    data = load_data(job_dir)
+    assert data.topical_map.map is not None
+    assert data.topical_map.map.pillars[0].name == "CRM Basics"
+    assert data.topical_map.model == "fake-model"
 
 
 def test_run_topical_map_force_recomputes(tmp_path, make_fake_generator):

@@ -183,6 +183,7 @@ def run_topical_map(job_dir: Path, generator: Generator | None = None, force: bo
         and data.topical_map is not None
         and data.topical_map.error is None
         and data.topical_map.map is not None
+        and _map_has_article_ideas(data.topical_map.map)
     ):
         logging.info("Skipping topical map for %s: cached result present (use --force to re-run)",
                      data.config.client_url)
