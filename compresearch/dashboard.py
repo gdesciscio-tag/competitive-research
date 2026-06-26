@@ -1,11 +1,14 @@
 # compresearch/dashboard.py
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
-from compresearch.models import Branding, JobData
+from compresearch.branding import load_branding
+from compresearch.job_store import load_data, save_data, slugify
+from compresearch.models import Branding, DashboardResult, JobData
 from compresearch.render import TEMPLATES_DIR, _bar_chart_svg, _logo_html, markdown_to_html
 from compresearch.utils import short_domain
 
@@ -116,3 +119,22 @@ def render_dashboard_html(context: dict, templates_dir: Path = TEMPLATES_DIR) ->
         autoescape=select_autoescape(["html", "xml"]),
     )
     return env.get_template("dashboard.html.j2").render(**context)
+
+
+def run_dashboard(job_dir, branding: Branding | None = None) -> JobData:
+    """Render the client dashboard to a single self-contained HTML file and record its
+    path in data.json. Never raises — failures are captured like the other steps."""
+    data = load_data(job_dir)
+    branding = branding or load_branding()
+    slug = slugify(data.config.client_name)
+    output_path = Path(job_dir) / "outputs" / f"{slug}-dashboard.html"
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        html = render_dashboard_html(build_dashboard_context(data, branding))
+        output_path.write_text(html, encoding="utf-8")
+        data.dashboard = DashboardResult(html_path=str(output_path))
+    except Exception as exc:
+        logging.warning("Dashboard render failed for %s: %s", data.config.client_url, exc)
+        data.dashboard = DashboardResult(error=str(exc))
+    save_data(job_dir, data)
+    return data

@@ -109,3 +109,40 @@ def test_render_dashboard_html_handles_empty_job():
     html = render_dashboard_html(build_dashboard_context(data, Branding()))
     assert "X" in html                              # renders without error
     assert 'data-tab="keywords"' not in html        # absent sections produce no tab
+
+
+from compresearch.job_store import create_job, load_data, save_data
+
+
+def test_run_dashboard_writes_html_and_records_path(tmp_path):
+    from compresearch.dashboard import run_dashboard
+    cfg = JobConfig(client_name="Acme Co", client_url="https://acme.com")
+    job_dir = create_job(cfg, jobs_dir=tmp_path)
+    data = _full_jobdata()
+    data.config = cfg
+    save_data(job_dir, data)
+
+    run_dashboard(job_dir)
+
+    reloaded = load_data(job_dir)
+    assert reloaded.dashboard.error is None
+    assert reloaded.dashboard.html_path.endswith("acme-co-dashboard.html")
+    written = (job_dir / "outputs" / "acme-co-dashboard.html").read_text(encoding="utf-8")
+    assert written.startswith("<!DOCTYPE html>")
+    assert "free crm" in written
+
+
+def test_run_dashboard_captures_render_error(tmp_path, monkeypatch):
+    from compresearch import dashboard
+    cfg = JobConfig(client_name="Acme Co", client_url="https://acme.com")
+    job_dir = create_job(cfg, jobs_dir=tmp_path)
+
+    def boom(context, templates_dir=dashboard.TEMPLATES_DIR):
+        raise RuntimeError("template broke")
+
+    monkeypatch.setattr(dashboard, "render_dashboard_html", boom)
+    dashboard.run_dashboard(job_dir)
+
+    data = load_data(job_dir)
+    assert data.dashboard.html_path is None
+    assert "template broke" in data.dashboard.error
