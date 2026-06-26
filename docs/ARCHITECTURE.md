@@ -43,13 +43,15 @@ A job is a self-contained folder:
 jobs/<client-slug>/
   job.yaml        # the inputs: client name, URL, competitors, keyword source, business description
   data.json       # the single source of truth — every step writes its section here
+  run.log         # plain-text log of each run (tee'd from the logging output)
   keywords_input/ # (manual keyword mode only) the operator drops KeySearch CSVs here
-  outputs/        # the generated PDF (and a copy of the run report)
+  outputs/        # the generated PDF and the exported draft HTML files
 ```
 
-`data.json` grows one section per step: `sitemap`, `keywords`, `topical_map`, `draft_post`,
-`render`, `sheet`, and a `run_report` (per-step status + cost). All defined as pydantic models
-in `compresearch/models.py`.
+`data.json` grows one section per step: `sitemap`, `keywords`, `topical_map`, `draft_post`
+(plus `draft_posts`, the list of every drafted post), `draft_export`, `render`, `sheet`, and a
+`run_report` (per-step status + cost). All defined as pydantic models in `compresearch/models.py`.
+Each run also appends to a plain-text `run.log` in the job folder.
 
 ---
 
@@ -63,13 +65,15 @@ in `compresearch/models.py`.
 | `sitemap.py` | `run_sitemap` — discover + parse sitemaps, categorize URLs by section, infer cadence, compute content gaps |
 | `keywords.py` | `run_keywords` — DataForSEO API (or manual CSV); keyword gaps, quick wins, traffic value |
 | `topical_map.py` | `run_topical_map` — Claude (Sonnet 4.6) builds pillars → clusters → articles, grounded in the gaps |
-| `draft_post.py` | `run_draft_post` — Claude (Opus 4.8) writes a full SEO post, style-matched, with internal links |
+| `draft_post.py` | `run_draft_post` — Claude (Opus 4.8) writes a full SEO post, style-matched, with internal links; `check_draft_quality` flags SEO issues |
+| `draft_export.py` | `run_draft_export` — renders each draft to standalone HTML and a Google Doc |
 | `render.py` | `run_render` — builds the report HTML (Jinja2) and renders it to PDF via Playwright |
-| `sheets.py` | `run_sheet` — writes the six-tab Google Sheet via gspread |
+| `sheets.py` | `run_sheet` — writes the Google Sheet (one tab per section, one per draft) via gspread |
 | `branding.py` | Loads `branding.json` (logo/colors/fonts) over built-in defaults |
 | `costs.py` | Claude price table + `estimate_cost` |
-| `orchestrator.py` | `run_job` — chains all six steps; records per-step status + cost |
-| `cli.py` | The command-line interface (one subcommand per step, plus `run-job`) |
+| `runlog.py` | `job_log` — tees logging to `run.log`; `remediation_hint` for common credential errors |
+| `orchestrator.py` | `run_job` — chains all seven steps; caches completed work; records per-step status + cost |
+| `cli.py` | The command-line interface (one subcommand per step, plus `run-job` and `refresh-outputs`) |
 | `utils.py` | Small shared helpers (`short_domain`) |
 | `templates/report.html.j2` | The branded PDF report template |
 
@@ -79,7 +83,7 @@ in `compresearch/models.py`.
 
 **1. Every external service sits behind an injectable "seam."**
 HTTP fetching, the Claude calls, Playwright (Chromium), gspread (Google) — each is a parameter
-with a real default that tests replace with a fake. So the entire 128-test suite runs offline:
+with a real default that tests replace with a fake. So the entire 222-test suite runs offline:
 no network, no API keys, no Chromium, no Google. That's why you can refactor confidently.
 
 Example: `run_render(job_dir, html_to_pdf=render_pdf)` — production passes the real Playwright
@@ -87,16 +91,23 @@ renderer; tests pass a fake that captures the HTML.
 
 **2. Steps never crash the pipeline.**
 Each `run_*` captures its own errors into its result's `.error` field and returns normally.
-The orchestrator records each step as **ok / partial / failed** and keeps going, so a missing
-credential or one unreachable competitor degrades gracefully — you still get whatever deliverables
-the available data supports, and the run summary tells you exactly what happened.
+The orchestrator records each step as **ok / partial / failed / skipped** and keeps going, so a
+missing credential or one unreachable competitor degrades gracefully — you still get whatever
+deliverables the available data supports, and the run summary tells you exactly what happened
+(with a `fix:` hint for common credential errors). A full log lands in `jobs/<slug>/run.log`.
+
+**3. Re-running is cheap (idempotent steps).**
+The expensive analysis steps (sitemap, keywords, topical map, draft post) skip when a clean
+result is already cached, so `run-job --job-dir <dir>` resumes a job and only does outstanding
+work; `--force` recomputes. The cheap output steps (export, PDF, Sheet) always re-run so the
+deliverables reflect the latest data — `refresh-outputs` runs just those three.
 
 ---
 
 ## Cost & credentials
 
 - **Paid steps:** topical map + draft post (Claude API), keywords (DataForSEO, "api" mode), sheet (Google, free but needs a service account).
-- Per-job Claude cost is captured from real token usage and printed in the run summary (~a few cents to ~$0.10 for the LLM steps). DataForSEO is a few cents per domain; Google Sheets is free.
+- Per-job API cost is captured and printed in the run summary: Claude from real token usage (~a few cents to ~$0.10 for the LLM steps) plus DataForSEO's reported per-call cost (a few cents per domain). Google Sheets is free.
 - Credentials live in `.env` (gitignored). The keyword step also has a **manual mode** (`--keyword-source manual`) that uses KeySearch CSVs and needs no DataForSEO account.
 
 ---
@@ -119,11 +130,6 @@ your safety net.
 
 ## Known follow-ups (non-blocking)
 
-- DataForSEO returns a per-call `cost` field that isn't yet folded into the run report's total.
-- The single-step CLI subcommands print "Job complete" even if that step's `.error` is set
-  (the `run-job` summary does surface per-step status correctly).
-- **Location-page naming patterns:** the categorizer cleanly handles nested location hubs
-  (`/service-areas/<city>` → one section) and root-level blog posts (→ `(individual pages)`),
-  but competitors who put location pages at the *root* with a shared name pattern
-  (`/digital-marketing-passaic-nj`) fold into `(individual pages)` and lose the local-SEO
-  signal. Detecting shared-prefix/suffix slug patterns would recover it.
+Tracked in **[ROADMAP.md](ROADMAP.md)** — technical follow-ups (e.g. folding DataForSEO's
+per-call cost into the run report, standalone-CLI exit messaging, location-page slug detection)
+and the pending first live runs of the DataForSEO and Google Sheets paths.

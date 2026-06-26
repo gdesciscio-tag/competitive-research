@@ -26,7 +26,7 @@ Sheet — for one client:
 ```
 
 It prints a per-step pass/fail summary, the PDF path, the Google Sheet URL, and the estimated
-Claude cost for the job. The pipeline is resilient: a failed step is recorded and the rest still
+API cost for the job (Claude + DataForSEO). The pipeline is resilient: a failed step is recorded and the rest still
 run. Inside Claude Code, the `competitive-research` skill walks an operator through the same flow.
 
 Every run also writes a plain-text log to `jobs/<slug>/run.log`, and the summary prints a
@@ -35,7 +35,7 @@ SEO/quality concerns with the generated draft (keyword placement, meta length, w
 are listed as internal "quality notes" in the summary — they are never shown to the client.
 
 **Re-running is cheap.** Steps whose result is already cached are skipped (shown as `--` in
-the summary), so re-running incurs no extra crawl or Claude cost for completed work:
+the summary), so re-running incurs no extra crawl or API cost for completed work:
 
 ```
 # resume an existing job, skipping completed steps
@@ -202,10 +202,9 @@ The shareable URL is recorded in `data.json` under `sheet`.
 
 ## Status
 
-- [x] Foundation (job store, schema, settings)
-- [x] Sitemap module
-- [x] Keywords module
-- [x] Topical map module
-- [x] Draft post module
-- [x] Render module (branded PDF + Google Sheet)
-- [x] Orchestrator + Claude Code skill
+The core pipeline and the Claude Code skill are complete and fully tested offline. On top of
+the MVP, the engine also supports multiple drafts per job, output refresh, step caching /
+resumable runs, a per-job run log, and internal draft quality checks.
+
+For what's built, what's next (technical follow-ups + first live verification), and what's
+out of scope, see **[docs/ROADMAP.md](docs/ROADMAP.md)**.

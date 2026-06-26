@@ -15,7 +15,7 @@ gates the step that uses it.
 # from the project root: C:\Users\gdesc\Documents\Software\Competitive Research
 .venv\Scripts\python -m pip install -r requirements.txt
 .venv\Scripts\python -m playwright install chromium   # one-time; needed for the PDF
-.venv\Scripts\python -m pytest -q                      # sanity check: should say "128 passed"
+.venv\Scripts\python -m pytest -q                      # sanity check: should say "222 passed"
 ```
 
 There is already a `.env` file in the project root with blank keys — fill it in as you go below.
@@ -130,13 +130,16 @@ Competitive research job complete:
   [OK ] sheet
   PDF:   jobs\acme-co\outputs\acme-co-competitive-research.pdf
   Sheet: https://docs.google.com/spreadsheets/d/...
-  Estimated LLM cost: $0.0612
+  Estimated API cost: $0.0612
 ```
 
 Marks: `[OK ]` passed, `[~~ ]` partial (ran but some data was incomplete — e.g. one competitor
-unreachable), `[XX ]` failed (reason inline). Failed/partial steps don't stop the others.
+unreachable), `[XX ]` failed (reason inline, with a `fix:` hint for common credential problems),
+`[-- ]` skipped (a cached result was reused). Failed/partial steps don't stop the others.
 Because it's resilient, you can fill in credentials incrementally: run it with only some keys set,
-see which steps pass, add the next credential, run again.
+see which steps pass, add the next credential, and **re-run with `run-job --job-dir jobs\<slug>`**
+— completed steps are skipped, so only the failed/remaining ones execute (add `--force` to redo
+everything). A full log of each run is saved to `jobs\<slug>\run.log`.
 
 **Inside Claude Code:** just say *"run a competitive research job for Acme at acme.com vs rival-a.com and rival-b.com"* — the `competitive-research` skill walks through it.
 
@@ -145,9 +148,9 @@ see which steps pass, add the next credential, run again.
 ## 6. Verifying the first run
 
 - **PDF:** open `jobs\<slug>\outputs\<slug>-competitive-research.pdf` — check the sections render and the branding looks right.
-- **Sheet:** open the printed URL (or find it under "Shared with me" in `GOOGLE_SHARE_EMAIL`'s Drive) — six tabs.
+- **Sheet:** open the printed URL (or find it under "Shared with me" in `GOOGLE_SHARE_EMAIL`'s Drive) — one tab per analysis section (and one per drafted post).
 - **`data.json`:** `jobs\<slug>\data.json` holds everything, including `run_report` (per-step status + cost).
-- **If a step failed:** the summary names it and the reason; `data.json`'s matching section has the full `.error`. Most first-run failures are a missing/typo'd `.env` value or an un-enabled Google API.
+- **If a step failed:** the summary names it and the reason (with a `fix:` hint); `data.json`'s matching section has the full `.error`, and `jobs\<slug>\run.log` has the complete log. Most first-run failures are a missing/typo'd `.env` value or an un-enabled Google API. Fix it and re-run with `run-job --job-dir jobs\<slug>` — only the failed step re-executes.
 
 ---
 
